@@ -1,0 +1,384 @@
+"""
+LLM Handler - Multi-model LLM client with tool execution
+Supports Grok, Claude, and Gemini with proper tool formatting
+"""
+
+import os
+import json
+import asyncio
+import aiohttp
+from typing import Dict, Any, Optional, List, Tuple
+
+try:
+    import psycopg2
+    PSYCOPG2_AVAILABLE = True
+except ImportError:
+    PSYCOPG2_AVAILABLE = False
+
+
+class LLMHandler:
+    """
+    Handles API interactions with various AI models (Grok, Claude, Gemini).
+    Manages API keys and tool execution loops.
+    """
+    
+    def __init__(self, api_keys: Dict[str, str] = None, db_connection_string: str = None):
+        """
+        Initialize LLM handler.
+        
+        Args:
+            api_keys: Dictionary of API keys {'grok': 'key', 'claude': 'key', 'gemini': 'key'}
+            db_connection_string: PostgreSQL connection string for loading API keys
+        """
+        self.db_connection_string = db_connection_string or os.getenv('DATABASE_URL')
+        self.api_keys = api_keys or self._load_api_keys()
+    
+    def _load_api_keys(self) -> Dict[str, str]:
+        """Load API keys from PostgreSQL or environment variables"""
+        # Try PostgreSQL first
+        if PSYCOPG2_AVAILABLE and self.db_connection_string:
+            try:
+                keys = self._load_api_keys_from_postgres()
+                if keys:
+                    return keys
+            except Exception as e:
+                print(f"Warning: Failed to load API keys from PostgreSQL: {e}")
+        
+        # Fallback to environment variables
+        return self._load_api_keys_from_env()
+    
+    def _load_api_keys_from_postgres(self) -> Dict[str, str]:
+        """Load API keys from PostgreSQL database"""
+        try:
+            conn = psycopg2.connect(self.db_connection_string)
+            cursor = conn.cursor()
+            
+            # Query for active API keys
+            cursor.execute("""
+                SELECT service_name, api_key 
+                FROM ai_api_keys 
+                WHERE is_active = true
+            """)
+            
+            results = cursor.fetchall()
+            cursor.close()
+            conn.close()
+            
+            if results:
+                keys = {row[0].lower(): row[1] for row in results}
+                print(f"Loaded API keys from PostgreSQL for: {list(keys.keys())}")
+                return keys
+            
+            return {}
+            
+        except Exception as e:
+            raise Exception(f"Error loading API keys from PostgreSQL: {e}")
+    
+    def _load_api_keys_from_env(self) -> Dict[str, str]:
+        """Load API keys from environment variables (fallback)"""
+        return {
+            'grok': os.getenv('GROK_API_KEY', ''),
+            'claude': os.getenv('CLAUDE_API_KEY', ''),
+            'gemini': os.getenv('GEMINI_API_KEY', '')
+        }
+    
+    async def call_model(self, model_name: str, prompt: str, system_prompt: str = None, 
+                        tools_registry = None) -> Tuple[Optional[str], str, Optional[str]]:
+        """
+        Unified method to call any supported model.
+        
+        Args:
+            model_name: Model name ('grok', 'claude', 'gemini')
+            prompt: User prompt
+            system_prompt: System prompt (optional)
+            tools_registry: ToolsRegistry instance for tool execution
+        
+        Returns:
+            Tuple of (response_text, status, error_message)
+        """
+        model_name = model_name.lower()
+        
+        if model_name == 'grok':
+            return await self._call_grok(prompt, system_prompt, tools_registry)
+        elif model_name == 'claude':
+            return await self._call_claude(prompt, system_prompt, tools_registry)
+        elif model_name == 'gemini':
+            return await self._call_gemini(prompt, system_prompt, tools_registry)
+        else:
+            return None, 'error', f"Unknown model: {model_name}"
+    
+    async def _call_grok(self, prompt: str, system_prompt: str, tools_registry) -> Tuple[Optional[str], str, Optional[str]]:
+        """Call Grok (X.AI) API"""
+        try:
+            api_key = self.api_keys.get('grok')
+            if not api_key:
+                return None, 'error', 'Grok API key not found'
+            
+            headers = {
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json'
+            }
+            
+            messages = []
+            if system_prompt:
+                messages.append({'role': 'system', 'content': system_prompt})
+            messages.append({'role': 'user', 'content': prompt})
+            
+            # Format tools for Grok (OpenAI format)
+            tools_def = []
+            if tools_registry:
+                for tool in tools_registry.get_all_tools_definitions():
+                    tools_def.append({
+                        "type": "function",
+                        "function": tool
+                    })
+            
+            payload = {
+                'messages': messages,
+                'model': 'grok-beta',
+                'stream': False,
+                'temperature': 0.7
+            }
+            if tools_def:
+                payload['tools'] = tools_def
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post('https://api.x.ai/v1/chat/completions', 
+                                       headers=headers, json=payload) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        return None, 'error', f"HTTP {response.status}: {error_text}"
+                    
+                    data = await response.json()
+                    message = data['choices'][0]['message']
+                    
+                    # Handle tool calls
+                    if message.get('tool_calls') and tools_registry:
+                        tool_calls = message['tool_calls']
+                        messages.append(message)
+                        
+                        for tool_call in tool_calls:
+                            func_name = tool_call['function']['name']
+                            try:
+                                args = json.loads(tool_call['function']['arguments'])
+                                result = tools_registry.execute_tool(func_name, args)
+                            except Exception as e:
+                                result = f"Error executing {func_name}: {e}"
+                            
+                            messages.append({
+                                "tool_call_id": tool_call['id'],
+                                "role": "tool",
+                                "name": func_name,
+                                "content": str(result)
+                            })
+                        
+                        # Follow-up call
+                        payload['messages'] = messages
+                        del payload['tools']  # Remove tools to prevent loop
+                        
+                        async with session.post('https://api.x.ai/v1/chat/completions',
+                                               headers=headers, json=payload) as response2:
+                            if response2.status != 200:
+                                return None, 'error', f"HTTP {response2.status} (Round 2)"
+                            data2 = await response2.json()
+                            return data2['choices'][0]['message']['content'], 'success', None
+                    
+                    return message['content'], 'success', None
+        
+        except Exception as e:
+            return None, 'error', str(e)
+    
+    async def _call_claude(self, prompt: str, system_prompt: str, tools_registry) -> Tuple[Optional[str], str, Optional[str]]:
+        """Call Claude (Anthropic) API"""
+        try:
+            api_key = self.api_keys.get('claude')
+            if not api_key:
+                return None, 'error', 'Claude API key not found'
+            
+            headers = {
+                'x-api-key': api_key,
+                'Content-Type': 'application/json',
+                'anthropic-version': '2023-06-01'
+            }
+            
+            messages = [{'role': 'user', 'content': prompt}]
+            
+            payload = {
+                'model': 'claude-sonnet-4-20250514',
+                'max_tokens': 4096,
+                'messages': messages
+            }
+            if system_prompt:
+                payload['system'] = system_prompt
+            
+            # Format tools for Claude
+            if tools_registry:
+                tools_def = []
+                for tool in tools_registry.get_all_tools_definitions():
+                    tools_def.append({
+                        "name": tool['name'],
+                        "description": tool['description'],
+                        "input_schema": tool['parameters']
+                    })
+                payload['tools'] = tools_def
+            
+            async with aiohttp.ClientSession() as session:
+                # Multi-turn tool execution loop
+                for turn in range(10):  # Max 10 turns
+                    async with session.post('https://api.anthropic.com/v1/messages',
+                                           headers=headers, json=payload) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            return None, 'error', f"HTTP {response.status}: {error_text}"
+                        
+                        data = await response.json()
+                        
+                        # Check if tool use
+                        if data.get('stop_reason') == 'tool_use' and tools_registry:
+                            messages.append({"role": "assistant", "content": data['content']})
+                            
+                            tool_results = []
+                            for block in data['content']:
+                                if block['type'] == 'tool_use':
+                                    tool_name = block['name']
+                                    tool_input = block['input']
+                                    
+                                    try:
+                                        result = tools_registry.execute_tool(tool_name, tool_input)
+                                        tool_results.append({
+                                            "type": "tool_result",
+                                            "tool_use_id": block['id'],
+                                            "content": str(result)
+                                        })
+                                    except Exception as e:
+                                        tool_results.append({
+                                            "type": "tool_result",
+                                            "tool_use_id": block['id'],
+                                            "content": f"Error: {e}",
+                                            "is_error": True
+                                        })
+                            
+                            messages.append({"role": "user", "content": tool_results})
+                            payload['messages'] = messages
+                            continue  # Loop again with tool results
+                        
+                        # No tool use - return text
+                        for block in data['content']:
+                            if block['type'] == 'text':
+                                return block['text'], 'success', None
+                        
+                        return None, 'error', 'No text response'
+                
+                return None, 'error', 'Max tool iterations reached'
+        
+        except Exception as e:
+            return None, 'error', str(e)
+    
+    async def _call_gemini(self, prompt: str, system_prompt: str, tools_registry) -> Tuple[Optional[str], str, Optional[str]]:
+        """Call Gemini (Google) API"""
+        try:
+            api_key = self.api_keys.get('gemini')
+            if not api_key:
+                return None, 'error', 'Gemini API key not found'
+            
+            model = 'gemini-2.0-flash-exp'
+            url = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
+            
+            # Format tools for Gemini
+            tools_def = []
+            if tools_registry:
+                funcs = []
+                for tool in tools_registry.get_all_tools_definitions():
+                    props = {}
+                    for k, v in tool['parameters']['properties'].items():
+                        # Map JSON Schema types to Gemini types
+                        gemini_type = "STRING"
+                        if v['type'] == 'integer':
+                            gemini_type = "INTEGER"
+                        elif v['type'] == 'number':
+                            gemini_type = "NUMBER"
+                        elif v['type'] == 'boolean':
+                            gemini_type = "BOOLEAN"
+                        elif v['type'] == 'array':
+                            gemini_type = "ARRAY"
+                        elif v['type'] == 'object':
+                            gemini_type = "OBJECT"
+                        
+                        props[k] = {
+                            "type": gemini_type,
+                            "description": v['description']
+                        }
+                    
+                    funcs.append({
+                        "name": tool['name'],
+                        "description": tool['description'],
+                        "parameters": {
+                            "type": "OBJECT",
+                            "properties": props,
+                            "required": tool['parameters'].get('required', [])
+                        }
+                    })
+                tools_def = [{'function_declarations': funcs}]
+            
+            contents = []
+            if system_prompt:
+                contents.append({'role': 'user', 'parts': [{'text': f"System: {system_prompt}"}]})
+                contents.append({'role': 'model', 'parts': [{'text': "Understood."}]})
+            
+            contents.append({'role': 'user', 'parts': [{'text': prompt}]})
+            
+            payload = {'contents': contents}
+            if tools_def:
+                payload['tools'] = tools_def
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        return None, 'error', f"HTTP {response.status}: {error_text}"
+                    
+                    data = await response.json()
+                    candidate = data['candidates'][0]
+                    parts = candidate['content']['parts']
+                    
+                    # Check for function call
+                    func_call = next((p['functionCall'] for p in parts if 'functionCall' in p), None)
+                    
+                    if func_call and tools_registry:
+                        contents.append({'role': 'model', 'parts': [{'functionCall': func_call}]})
+                        
+                        tool_name = func_call['name']
+                        args = func_call['args']
+                        
+                        try:
+                            result = tools_registry.execute_tool(tool_name, args)
+                        except Exception as e:
+                            result = f"Error: {e}"
+                        
+                        contents.append({
+                            'role': 'function',
+                            'parts': [{
+                                'functionResponse': {
+                                    'name': tool_name,
+                                    'response': {'content': str(result)}
+                                }
+                            }]
+                        })
+                        
+                        payload['contents'] = contents
+                        
+                        # Follow-up call
+                        async with session.post(url, json=payload) as response2:
+                            if response2.status != 200:
+                                error_text2 = await response2.text()
+                                return None, 'error', f"HTTP {response2.status} (Round 2): {error_text2[:200]}"
+                            data2 = await response2.json()
+                            parts2 = data2['candidates'][0]['content']['parts']
+                            text2 = next((p['text'] for p in parts2 if 'text' in p), None)
+                            return text2, 'success', None
+                    
+                    text = next((p['text'] for p in parts if 'text' in p), None)
+                    return text, 'success', None
+        
+        except Exception as e:
+            return None, 'error', str(e)

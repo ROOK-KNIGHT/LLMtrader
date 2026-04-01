@@ -1,0 +1,128 @@
+/* Terminal Grid Layout System */
+
+.terminal-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-template-rows: auto 1fr;
+  gap: var(--spacing-sm);
+  width: 100%;
+  height: 100%;
+  padding: var(--spacing-sm);
+}
+
+/* Top Bar - Full Width */
+.top-bar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  height: 48px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacing-md);
+}
+
+/* Main Content Area */
+.main-content {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: var(--spacing-sm);
+  overflow: hidden;
+}
+
+/* Panel Base Styles */
+.panel {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  padding: var(--spacing-sm) var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+}
+
+.panel-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.panel-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.panel-body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--spacing-md);
+}
+
+
+/* Responsive Breakpoints */
+@media (max-width: 1280px) {
+  .main-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto;
+  }
+  
+  .ai-chat-panel {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    min-height: 400px;
+  }
+  
+  .portfolio-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  
+  .chart-panel {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+
+/* Draggable/Resizable Handles (for future enhancement) */
+.resize-handle {
+  position: absolute;
+  background: transparent;
+  z-index: 10;
+}
+
+.resize-handle-right {
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.resize-handle-bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+.resize-handle:hover {
+  background: var(--accent-primary);
+  opacity: 0.5;
+}

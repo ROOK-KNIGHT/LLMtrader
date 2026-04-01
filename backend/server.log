@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/isaac/LLM_VolFlow_Trader/backend/server.py", line 6, in <module>
+    from fastapi import FastAPI, HTTPException, Depends, Header, Query
+ModuleNotFoundError: No module named 'fastapi'

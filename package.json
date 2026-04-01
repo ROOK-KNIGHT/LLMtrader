@@ -1,0 +1,12 @@
+{
+  "name": "llm_volflow_trader",
+  "version": "1.0.0",
+  "description": "**AI-Powered Portfolio Management & Swing Trading Platform**",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
