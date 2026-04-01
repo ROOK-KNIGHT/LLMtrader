@@ -74,12 +74,11 @@ RUN rm /etc/nginx/sites-enabled/default
 COPY nginx.conf /etc/nginx/sites-available/llmtrader
 RUN ln -s /etc/nginx/sites-available/llmtrader /etc/nginx/sites-enabled/
 
-# Create supervisor config
-RUN mkdir -p /var/log/supervisor
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Create directories for logs
+RUN mkdir -p /var/log/supervisor /var/log/nginx /var/log/uvicorn
 
-# Create directories
-RUN mkdir -p /var/log/nginx /var/log/uvicorn
+# Create supervisor config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Expose ports
 EXPOSE 80 443
