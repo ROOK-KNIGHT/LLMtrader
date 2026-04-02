@@ -24,9 +24,14 @@ class SchwabOAuth:
         Initialize Schwab OAuth service.
         
         Args:
-            encryption_key: Fernet encryption key for app_secret (base64 encoded)
+            encryption_key: Fernet encryption key for app_secret (base64 encoded).
+                            Falls back to ENCRYPTION_KEY environment variable.
+                            A new random key is generated only as a last resort
+                            (not recommended for production — set ENCRYPTION_KEY env var).
         """
-        # Generate new key if not provided
+        import os
+        if encryption_key is None:
+            encryption_key = os.environ.get('ENCRYPTION_KEY')
         if encryption_key is None:
             encryption_key = Fernet.generate_key().decode()
         

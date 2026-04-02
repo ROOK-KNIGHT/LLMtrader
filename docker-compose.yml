@@ -42,6 +42,9 @@ services:
       # JWT Secret - shared across all workers
       JWT_SECRET: ${JWT_SECRET:-llmtrader_jwt_secret_change_me_in_production_2026}
       
+      # Fernet encryption key for Schwab app_secret storage
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      
       # Domain
       DOMAIN: volflowagent.com
     volumes:
