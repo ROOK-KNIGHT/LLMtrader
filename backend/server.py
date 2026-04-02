@@ -3,12 +3,16 @@ FastAPI Server - Main application server
 """
 
 import os
+import asyncio
+import logging
 from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from backend.database import db
 from backend.auth.service import AuthService
@@ -793,15 +797,106 @@ async def health_check():
 # Startup/Shutdown
 # ============================================================================
 
+# ============================================================================
+# Token Refresh Background Task
+# ============================================================================
+
+async def _refresh_all_schwab_tokens():
+    """
+    Background task: refresh Schwab tokens for every user whose token
+    expires within the next 10 minutes (runs every 5 minutes).
+    """
+    while True:
+        try:
+            # Find all users with tokens expiring within 10 minutes
+            with db.get_cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT st.user_id, st.refresh_token, st.expires_at,
+                           sc.app_key, sc.app_secret_encrypted, sc.callback_url
+                    FROM schwab_tokens st
+                    JOIN schwab_credentials sc ON sc.user_id = st.user_id
+                    WHERE st.expires_at <= NOW() + INTERVAL '10 minutes'
+                    """
+                )
+                rows = cursor.fetchall()
+
+            if rows:
+                logger.info(f"Token refresh job: found {len(rows)} token(s) to refresh")
+
+            for row in rows:
+                user_id = row['user_id']
+                try:
+                    import base64, requests as req
+                    app_secret = schwab_oauth.decrypt_secret(row['app_secret_encrypted'])
+                    credentials = f"{row['app_key']}:{app_secret}"
+                    encoded = base64.b64encode(credentials.encode()).decode()
+
+                    resp = req.post(
+                        "https://api.schwabapi.com/v1/oauth/token",
+                        headers={
+                            'Authorization': f'Basic {encoded}',
+                            'Content-Type': 'application/x-www-form-urlencoded'
+                        },
+                        data={
+                            'grant_type': 'refresh_token',
+                            'refresh_token': row['refresh_token']
+                        },
+                        timeout=15
+                    )
+
+                    if resp.status_code == 200:
+                        tokens = resp.json()
+                        from datetime import timedelta
+                        expires_at = datetime.utcnow() + timedelta(seconds=tokens.get('expires_in', 1800))
+
+                        with db.get_cursor() as cursor:
+                            cursor.execute(
+                                """
+                                UPDATE schwab_tokens
+                                SET access_token = %s,
+                                    refresh_token = %s,
+                                    expires_at = %s,
+                                    updated_at = NOW()
+                                WHERE user_id = %s
+                                """,
+                                (
+                                    tokens['access_token'],
+                                    tokens.get('refresh_token', row['refresh_token']),
+                                    expires_at,
+                                    user_id
+                                )
+                            )
+                        logger.info(f"Token refreshed for user_id={user_id}, expires at {expires_at}")
+                    else:
+                        logger.warning(
+                            f"Token refresh failed for user_id={user_id}: "
+                            f"{resp.status_code} - {resp.text[:200]}"
+                        )
+
+                except Exception as e:
+                    logger.error(f"Error refreshing token for user_id={user_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"Token refresh job error: {e}")
+
+        # Wait 5 minutes before next run
+        await asyncio.sleep(300)
+
+
 @app.on_event("startup")
 async def startup():
-    """Initialize database on startup"""
+    """Initialize database on startup and launch background tasks"""
     print("🚀 Starting LLMtrader API server...")
     try:
         db.create_tables()
         print("✅ Database initialized")
     except Exception as e:
         print(f"⚠️  Database initialization warning: {e}")
+
+    # Start the Schwab token refresh background task
+    asyncio.create_task(_refresh_all_schwab_tokens())
+    print("✅ Schwab token refresh job started (runs every 5 minutes)")
 
 
 @app.on_event("shutdown")
