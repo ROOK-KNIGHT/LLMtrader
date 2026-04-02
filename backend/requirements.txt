@@ -19,7 +19,7 @@ anthropic==0.25.0
 # Scientific / technical analysis
 numpy==1.26.4
 pandas==2.2.1
-TA-Lib==0.4.28
+ta-lib==0.4.28
 
 # Email validation
 email-validator==2.1.0
