@@ -315,14 +315,28 @@ async def schwab_oauth_callback(
     state: str = Query(None)
 ):
     """
-    Handle Schwab OAuth callback.
-    Exchanges auth code for tokens and redirects to frontend.
+    Legacy callback handler (kept for backward compatibility).
+    New flow uses POST /api/schwab/exchange-token from the frontend.
+    """
+    # Redirect to frontend with code in query params - frontend handles exchange
+    return RedirectResponse(url=f"https://volflowagent.com/oauth/schwab/callback?code={code}&session={state or ''}")
+
+
+@app.post("/api/schwab/exchange-token")
+async def exchange_schwab_token(
+    request_data: dict,
+    user = Depends(get_current_user)
+):
+    """
+    Exchange Schwab authorization code for tokens.
+    Called by the frontend after Schwab redirects back with ?code=
     """
     try:
-        if not state:
-            raise HTTPException(status_code=400, detail="Missing state parameter")
+        code = request_data.get('code')
+        if not code:
+            raise HTTPException(status_code=400, detail="Missing authorization code")
         
-        user_id = int(state)
+        user_id = user['user_id']
         
         # Get user's credentials
         with db.get_cursor() as cursor:
@@ -333,7 +347,7 @@ async def schwab_oauth_callback(
             creds = cursor.fetchone()
         
         if not creds:
-            raise HTTPException(status_code=400, detail="Credentials not found")
+            raise HTTPException(status_code=400, detail="Schwab credentials not configured. Please complete onboarding first.")
         
         # Decrypt app_secret
         app_secret = schwab_oauth.decrypt_secret(creds['app_secret_encrypted'])
@@ -373,8 +387,7 @@ async def schwab_oauth_callback(
                 )
             )
         
-        # Redirect to frontend success page
-        return RedirectResponse(url="http://localhost:5173/oauth/success")
+        return {"success": True, "message": "Schwab account connected successfully"}
     
     except HTTPException:
         raise

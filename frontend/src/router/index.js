@@ -57,6 +57,12 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   
+  // Intercept Schwab OAuth callback - code lands on root URL
+  if (to.path === '/' && to.query.code) {
+    next({ name: 'SchwabCallback', query: to.query })
+    return
+  }
+  
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else if (to.path === '/login' && authStore.isAuthenticated) {
