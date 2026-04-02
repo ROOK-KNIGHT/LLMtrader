@@ -109,7 +109,7 @@
         
         <!-- Skip option -->
         <div style="margin-top: 2rem; text-align: center;">
-          <button class="btn btn-secondary" @click="$router.push('/terminal')">
+          <button class="btn btn-secondary" @click="$router.push('/dashboard')">
             Skip for Now
           </button>
         </div>

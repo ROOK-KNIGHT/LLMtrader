@@ -18,6 +18,12 @@
       <div class="nav-right">
         <span class="status-badge live">Live</span>
         <span class="status-badge privacy">Privacy</span>
+        <button class="nav-btn" @click="$router.push('/onboarding')" title="Schwab Settings">
+          ⚙ Settings
+        </button>
+        <button class="nav-btn nav-btn-logout" @click="handleLogout" title="Logout">
+          ⏻ Logout
+        </button>
       </div>
     </div>
 
@@ -264,8 +270,10 @@
 
 <script setup>
 import { ref, onMounted, computed, nextTick } from 'vue'
+import { useRouter } from 'vue-router'
 import { createChart } from 'lightweight-charts'
 import { useAIStore } from '@/stores/ai'
+import { useAuthStore } from '@/stores/auth'
 import PromptLibrary from '@/components/terminal/PromptLibrary.vue'
 import RiskDashboard from '@/components/terminal/RiskDashboard.vue'
 import ConfigDashboard from '@/components/terminal/ConfigDashboard.vue'
@@ -273,8 +281,15 @@ import SidePanel from '@/components/terminal/SidePanel.vue'
 import { usePanelStore } from '@/stores/panels'
 import dayjs from 'dayjs'
 
+const router = useRouter()
 const aiStore = useAIStore()
+const authStore = useAuthStore()
 const panelStore = usePanelStore()
+
+function handleLogout() {
+  authStore.logout()
+  router.push('/login')
+}
 const messageInput = ref('')
 const messagesContainer = ref(null)
 
@@ -574,6 +589,34 @@ onMounted(() => {
   background: rgba(255, 149, 0, 0.2);
   color: var(--accent-primary);
   border: 1px solid var(--accent-primary);
+}
+
+/* Nav Buttons */
+.nav-btn {
+  padding: 0.25rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-family: 'VT323', monospace;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+.nav-btn-logout:hover {
+  border-color: #ef4444;
+  color: #ef4444;
 }
 
 /* Tab Navigation */
