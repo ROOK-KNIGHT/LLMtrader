@@ -7,12 +7,13 @@ from fastapi import FastAPI, HTTPException, Depends, Header, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 
 from backend.database import db
 from backend.auth.service import AuthService
 from backend.auth.schwab_oauth import SchwabOAuth
+from backend.schwab import SchwabAPI
 
 # Initialize services
 auth_service = AuthService()
@@ -30,13 +31,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://localhost:5174", 
+        "http://localhost:5174",
         "http://localhost:5175",
         "http://localhost:5176",
         "https://127.0.0.1:5173",
         "https://127.0.0.1:5174",
         "https://127.0.0.1:5175",
-        "https://127.0.0.1:5176"
+        "https://127.0.0.1:5176",
+        "https://volflowagent.com",
+        "https://www.volflowagent.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -86,7 +89,7 @@ class AuthResponse(BaseModel):
 async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     """
     Dependency to get current user from JWT token.
-    
+
     Usage:
         @app.get("/api/protected")
         async def protected_route(user = Depends(get_current_user)):
@@ -94,19 +97,31 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
-    
-    # Extract token from "Bearer <token>"
+
     parts = authorization.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
         raise HTTPException(status_code=401, detail="Invalid authorization header")
-    
+
     token = parts[1]
     user_info = auth_service.get_user_from_token(token)
-    
+
     if not user_info:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    
+
     return user_info
+
+
+def get_schwab_api(user: Dict[str, Any] = Depends(get_current_user)) -> SchwabAPI:
+    """
+    FastAPI dependency that returns a SchwabAPI instance for the current user.
+    Loads credentials and tokens from PostgreSQL.
+    """
+    try:
+        return SchwabAPI(user_id=user['user_id'])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initialize Schwab client: {str(e)}")
 
 
 # ============================================================================
@@ -117,16 +132,13 @@ async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
 async def signup(request: SignupRequest):
     """Create a new user account"""
     try:
-        # Check if user exists
         with db.get_cursor() as cursor:
             cursor.execute("SELECT id FROM users WHERE email = %s", (request.email,))
             if cursor.fetchone():
                 raise HTTPException(status_code=400, detail="Email already registered")
-        
-        # Hash password
+
         password_hash = auth_service.hash_password(request.password)
-        
-        # Create user
+
         with db.get_cursor() as cursor:
             cursor.execute(
                 """
@@ -137,10 +149,9 @@ async def signup(request: SignupRequest):
                 (request.email, password_hash, request.display_name or request.email.split('@')[0])
             )
             user = cursor.fetchone()
-        
-        # Create JWT token
+
         token = auth_service.create_token(user['id'], user['email'])
-        
+
         return AuthResponse(
             token=token,
             user=UserResponse(
@@ -152,7 +163,7 @@ async def signup(request: SignupRequest):
                 onboarding_complete=False
             )
         )
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -163,32 +174,28 @@ async def signup(request: SignupRequest):
 async def login(request: LoginRequest):
     """Sign in with email and password"""
     try:
-        # Get user
         with db.get_cursor() as cursor:
             cursor.execute(
                 "SELECT id, email, password_hash, display_name, avatar_url FROM users WHERE email = %s",
                 (request.email,)
             )
             user = cursor.fetchone()
-        
+
         if not user:
             raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        # Verify password
+
         if not auth_service.verify_password(request.password, user['password_hash']):
             raise HTTPException(status_code=401, detail="Invalid email or password")
-        
-        # Check if Schwab is connected
+
         with db.get_cursor() as cursor:
             cursor.execute(
                 "SELECT id FROM schwab_tokens WHERE user_id = %s",
                 (user['id'],)
             )
             schwab_connected = cursor.fetchone() is not None
-        
-        # Create JWT token
+
         token = auth_service.create_token(user['id'], user['email'])
-        
+
         return AuthResponse(
             token=token,
             user=UserResponse(
@@ -200,7 +207,7 @@ async def login(request: LoginRequest):
                 onboarding_complete=schwab_connected
             )
         )
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -217,18 +224,17 @@ async def get_me(user = Depends(get_current_user)):
                 (user['user_id'],)
             )
             user_data = cursor.fetchone()
-        
+
         if not user_data:
             raise HTTPException(status_code=404, detail="User not found")
-        
-        # Check if Schwab is connected
+
         with db.get_cursor() as cursor:
             cursor.execute(
                 "SELECT id FROM schwab_tokens WHERE user_id = %s",
                 (user['user_id'],)
             )
             schwab_connected = cursor.fetchone() is not None
-        
+
         return UserResponse(
             id=user_data['id'],
             email=user_data['email'],
@@ -237,7 +243,7 @@ async def get_me(user = Depends(get_current_user)):
             schwab_connected=schwab_connected,
             onboarding_complete=schwab_connected
         )
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -255,10 +261,8 @@ async def save_schwab_credentials(
 ):
     """Save Schwab API credentials"""
     try:
-        # Encrypt app_secret
         encrypted_secret = schwab_oauth.encrypt_secret(request.app_secret)
-        
-        # Save to database
+
         with db.get_cursor() as cursor:
             cursor.execute(
                 """
@@ -272,9 +276,9 @@ async def save_schwab_credentials(
                 """,
                 (user['user_id'], request.app_key, encrypted_secret, request.callback_url)
             )
-        
+
         return {"success": True, "message": "Credentials saved successfully"}
-    
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -283,26 +287,24 @@ async def save_schwab_credentials(
 async def get_schwab_auth_url(user = Depends(get_current_user)):
     """Get Schwab OAuth authorization URL"""
     try:
-        # Get user's credentials
         with db.get_cursor() as cursor:
             cursor.execute(
                 "SELECT app_key, callback_url FROM schwab_credentials WHERE user_id = %s",
                 (user['user_id'],)
             )
             creds = cursor.fetchone()
-        
+
         if not creds:
             raise HTTPException(status_code=400, detail="Schwab credentials not configured")
-        
-        # Generate auth URL with state = user_id for security
+
         auth_url = schwab_oauth.get_authorization_url(
             app_key=creds['app_key'],
             redirect_uri=creds['callback_url'],
             state=str(user['user_id'])
         )
-        
+
         return {"auth_url": auth_url}
-    
+
     except HTTPException:
         raise
     except Exception as e:
@@ -318,7 +320,6 @@ async def schwab_oauth_callback(
     Legacy callback handler (kept for backward compatibility).
     New flow uses POST /api/schwab/exchange-token from the frontend.
     """
-    # Redirect to frontend with code in query params - frontend handles exchange
     return RedirectResponse(url=f"https://volflowagent.com/oauth/schwab/callback?code={code}&session={state or ''}")
 
 
@@ -335,35 +336,30 @@ async def exchange_schwab_token(
         code = request_data.get('code')
         if not code:
             raise HTTPException(status_code=400, detail="Missing authorization code")
-        
+
         user_id = user['user_id']
-        
-        # Get user's credentials
+
         with db.get_cursor() as cursor:
             cursor.execute(
                 "SELECT app_key, app_secret_encrypted, callback_url FROM schwab_credentials WHERE user_id = %s",
                 (user_id,)
             )
             creds = cursor.fetchone()
-        
+
         if not creds:
             raise HTTPException(status_code=400, detail="Schwab credentials not configured. Please complete onboarding first.")
-        
-        # Decrypt app_secret
+
         app_secret = schwab_oauth.decrypt_secret(creds['app_secret_encrypted'])
-        
-        # Exchange code for tokens
+
         tokens = schwab_oauth.exchange_code_for_tokens(
             code=code,
             app_key=creds['app_key'],
             app_secret=app_secret,
             redirect_uri=creds['callback_url']
         )
-        
-        # Calculate expiry
+
         expires_at = schwab_oauth.calculate_token_expiry(tokens['expires_in'])
-        
-        # Save tokens to database
+
         with db.get_cursor() as cursor:
             cursor.execute(
                 """
@@ -386,13 +382,12 @@ async def exchange_schwab_token(
                     tokens.get('scope', '')
                 )
             )
-        
+
         return {"success": True, "message": "Schwab account connected successfully"}
-    
+
     except HTTPException:
         raise
     except Exception as e:
-        # Redirect to frontend error page
         raise HTTPException(status_code=500, detail=f"Token exchange failed: {str(e)}")
 
 
@@ -406,22 +401,380 @@ async def get_schwab_status(user = Depends(get_current_user)):
                 (user['user_id'],)
             )
             token = cursor.fetchone()
-        
+
         if not token:
             return {
                 "connected": False,
                 "expired": None,
                 "expires_at": None
             }
-        
+
         expired = schwab_oauth.is_token_expired(token['expires_at'])
-        
+
         return {
             "connected": True,
             "expired": expired,
             "expires_at": token['expires_at'].isoformat()
         }
-    
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Schwab Data API Routes
+# ============================================================================
+
+# --- Accounts ---
+
+@app.get("/api/schwab/accounts")
+async def get_accounts(
+    fields: Optional[str] = Query(None, description="Optional fields: positions"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get all linked Schwab accounts"""
+    try:
+        return schwab.accounts.get_all_accounts(fields=fields)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/accounts/numbers")
+async def get_account_numbers(schwab: SchwabAPI = Depends(get_schwab_api)):
+    """Get account numbers and hash values for all linked accounts"""
+    try:
+        return schwab.accounts.get_account_numbers()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/accounts/{account_hash}")
+async def get_account(
+    account_hash: str,
+    fields: Optional[str] = Query(None, description="Optional fields: positions"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get details for a specific account"""
+    try:
+        return schwab.accounts.get_account(account_hash, fields=fields)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/accounts/{account_hash}/positions")
+async def get_positions(
+    account_hash: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get current positions for an account"""
+    try:
+        return schwab.accounts.get_positions(account_hash)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/accounts/{account_hash}/balances")
+async def get_balances(
+    account_hash: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get account balances and buying power"""
+    try:
+        return schwab.accounts.get_balances(account_hash)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Quotes ---
+
+@app.get("/api/schwab/quotes")
+async def get_quotes(
+    symbols: str = Query(..., description="Comma-separated symbols, e.g. AAPL,MSFT,GOOGL"),
+    fields: Optional[str] = Query(None, description="quote, fundamental, extended, reference, regular"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get real-time quotes for multiple symbols"""
+    try:
+        symbol_list = [s.strip() for s in symbols.split(',')]
+        return schwab.quotes.get_quotes(symbol_list, fields=fields)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/quotes/{symbol}")
+async def get_quote(
+    symbol: str,
+    fields: Optional[str] = Query(None, description="quote, fundamental, extended, reference, regular"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get real-time quote for a single symbol"""
+    try:
+        return schwab.quotes.get_quote(symbol, fields=fields)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Price History ---
+
+@app.get("/api/schwab/history/{symbol}")
+async def get_price_history(
+    symbol: str,
+    period_type: Optional[str] = Query(None, description="day, month, year, ytd"),
+    period: Optional[int] = Query(None),
+    frequency_type: Optional[str] = Query(None, description="minute, daily, weekly, monthly"),
+    frequency: Optional[int] = Query(None),
+    start_date: Optional[int] = Query(None, description="Epoch milliseconds"),
+    end_date: Optional[int] = Query(None, description="Epoch milliseconds"),
+    extended_hours: bool = Query(False),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get historical OHLCV price data"""
+    try:
+        return schwab.price_history.get_price_history(
+            symbol=symbol,
+            period_type=period_type,
+            period=period,
+            frequency_type=frequency_type,
+            frequency=frequency,
+            start_date=start_date,
+            end_date=end_date,
+            need_extended_hours_data=extended_hours
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Options Chain ---
+
+@app.get("/api/schwab/options/{symbol}")
+async def get_option_chain(
+    symbol: str,
+    contract_type: Optional[str] = Query(None, description="CALL, PUT, ALL"),
+    strike_count: Optional[int] = Query(None),
+    range: Optional[str] = Query(None, description="ITM, NTM, OTM, ALL"),
+    from_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    to_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    exp_month: Optional[str] = Query(None, description="JAN, FEB, MAR, etc."),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get options chain with Greeks"""
+    try:
+        return schwab.options_chain.get_option_chain(
+            symbol=symbol,
+            contract_type=contract_type,
+            strike_count=strike_count,
+            range=range,
+            from_date=from_date,
+            to_date=to_date,
+            exp_month=exp_month
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/options/{symbol}/expirations")
+async def get_expiration_chain(
+    symbol: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get available option expiration dates"""
+    try:
+        return schwab.options_chain.get_expiration_chain(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Market Movers ---
+
+@app.get("/api/schwab/movers/{index}")
+async def get_movers(
+    index: str,
+    sort: Optional[str] = Query(None, description="VOLUME, TRADES, PERCENT_CHANGE_UP, PERCENT_CHANGE_DOWN"),
+    frequency: Optional[int] = Query(None, description="0, 1, 5, 10, 30, 60"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get top movers for an index ($SPX, $COMPX, $DJI, NYSE, NASDAQ)"""
+    try:
+        return schwab.movers.get_movers(index, sort=sort, frequency=frequency)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Market Hours ---
+
+@app.get("/api/schwab/market-hours")
+async def get_market_hours(
+    markets: Optional[str] = Query(None, description="equity, option, bond, future, forex (comma-separated)"),
+    date: Optional[str] = Query(None, description="YYYY-MM-DD (defaults to today)"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get market hours for all or specified markets"""
+    try:
+        return schwab.market_hours.get_markets(markets=markets, date=date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/market-hours/{market_id}")
+async def get_market_hours_by_id(
+    market_id: str,
+    date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get market hours for a specific market (equity, option, bond, future, forex)"""
+    try:
+        return schwab.market_hours.get_market(market_id, date=date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Instruments ---
+
+@app.get("/api/schwab/instruments")
+async def search_instruments(
+    symbol: str = Query(..., description="Symbol or search query"),
+    projection: str = Query("symbol-search", description="symbol-search, symbol-regex, desc-search, desc-regex, fundamental"),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Search for instruments by symbol or description"""
+    try:
+        return schwab.instruments.search_instruments(symbol, projection=projection)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/instruments/{cusip}")
+async def get_instrument_by_cusip(
+    cusip: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get instrument details by CUSIP"""
+    try:
+        return schwab.instruments.get_instrument_by_cusip(cusip)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- User Preferences ---
+
+@app.get("/api/schwab/user-preferences")
+async def get_user_preferences(schwab: SchwabAPI = Depends(get_schwab_api)):
+    """Get Schwab user account preferences"""
+    try:
+        return schwab.user_preferences.get_user_preferences()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Orders ---
+
+@app.get("/api/schwab/orders/{account_hash}")
+async def get_orders(
+    account_hash: str,
+    from_entered_time: Optional[str] = Query(None, description="ISO 8601 datetime"),
+    to_entered_time: Optional[str] = Query(None, description="ISO 8601 datetime"),
+    status: Optional[str] = Query(None, description="WORKING, FILLED, CANCELED, REJECTED, etc."),
+    max_results: Optional[int] = Query(None),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get orders for an account"""
+    try:
+        return schwab.orders.get_orders(
+            account_hash,
+            from_entered_time=from_entered_time,
+            to_entered_time=to_entered_time,
+            status=status,
+            max_results=max_results
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/orders/{account_hash}/{order_id}")
+async def get_order(
+    account_hash: str,
+    order_id: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get a specific order"""
+    try:
+        return schwab.orders.get_order(account_hash, order_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/schwab/orders/{account_hash}")
+async def place_order(
+    account_hash: str,
+    order_payload: dict,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Place an order"""
+    try:
+        return schwab.orders.place_order(account_hash, order_payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/schwab/orders/{account_hash}/preview")
+async def preview_order(
+    account_hash: str,
+    order_payload: dict,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Preview an order (validates without placing — shows commission, fees, buying power impact)"""
+    try:
+        return schwab.orders.preview_order(account_hash, order_payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/schwab/orders/{account_hash}/{order_id}")
+async def cancel_order(
+    account_hash: str,
+    order_id: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Cancel an order"""
+    try:
+        return schwab.orders.cancel_order(account_hash, order_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Transactions ---
+
+@app.get("/api/schwab/transactions/{account_hash}")
+async def get_transactions(
+    account_hash: str,
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    types: Optional[str] = Query(None, description="TRADE, DIVIDEND_OR_INTEREST, etc."),
+    symbol: Optional[str] = Query(None),
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get transaction history for an account"""
+    try:
+        return schwab.transactions.get_transactions(
+            account_hash,
+            start_date=start_date,
+            end_date=end_date,
+            types=types,
+            symbol=symbol
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/schwab/transactions/{account_hash}/{transaction_id}")
+async def get_transaction(
+    account_hash: str,
+    transaction_id: str,
+    schwab: SchwabAPI = Depends(get_schwab_api)
+):
+    """Get a specific transaction"""
+    try:
+        return schwab.transactions.get_transaction(account_hash, transaction_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
