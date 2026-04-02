@@ -59,6 +59,12 @@ router.beforeEach((to, from, next) => {
     return
   }
   
+  // Redirect bare / to login or dashboard
+  if (to.path === '/') {
+    next(authStore.isAuthenticated ? '/dashboard' : '/login')
+    return
+  }
+  
   if (to.meta.requiresAuth && !authStore.isAuthenticated) {
     next('/login')
   } else if (to.path === '/login' && authStore.isAuthenticated) {
