@@ -126,7 +126,7 @@ async function handleSubmit() {
     if (!authStore.user.schwab_connected) {
       router.push('/onboarding')
     } else {
-      router.push('/terminal')
+      router.push('/dashboard')
     }
   }
 }
