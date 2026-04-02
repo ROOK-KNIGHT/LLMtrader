@@ -218,13 +218,19 @@ class SchwabAPIClient:
             time.sleep(self.rate_limit_delay - elapsed)
         self.last_request_time = time.time()
 
-    def _get_headers(self) -> Dict[str, str]:
-        """Get request headers with Bearer auth token."""
-        return {
+    def _get_headers(self, method: str = 'GET') -> Dict[str, str]:
+        """Get request headers with Bearer auth token.
+        
+        Note: Schwab API rejects GET requests that include Content-Type: application/json,
+        so we only include it for methods that send a body (POST, PUT, PATCH).
+        """
+        headers = {
             'Authorization': f'Bearer {self.access_token}',
-            'Content-Type': 'application/json',
             'Accept': 'application/json'
         }
+        if method.upper() in ('POST', 'PUT', 'PATCH'):
+            headers['Content-Type'] = 'application/json'
+        return headers
 
     # -------------------------------------------------------------------------
     # Core HTTP Request
@@ -264,7 +270,7 @@ class SchwabAPIClient:
             else:
                 url = f"{self.MARKET_DATA_BASE_URL}{url}"
 
-        headers = self._get_headers()
+        headers = self._get_headers(method)
         logger.debug(f"{method} {url}")
 
         try:
@@ -281,7 +287,7 @@ class SchwabAPIClient:
             if response.status_code == 401 and auto_refresh:
                 logger.warning("Received 401, refreshing token and retrying...")
                 self.refresh_access_token()
-                headers = self._get_headers()
+                headers = self._get_headers(method)
                 response = self.session.request(
                     method=method,
                     url=url,
