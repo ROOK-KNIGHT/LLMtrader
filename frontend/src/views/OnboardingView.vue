@@ -128,13 +128,13 @@ const router = useRouter()
 const step = ref(1)
 const appKey = ref('')
 const appSecret = ref('')
-const callbackUrl = ref('http://127.0.0.1:8000/api/schwab/callback')
+const callbackUrl = ref(`${window.location.origin}/api/schwab/callback`)
 const isLoading = ref(false)
 const error = ref(null)
 const success = ref(false)
 
 const api = axios.create({
-  baseURL: 'http://127.0.0.1:8000',
+  baseURL: '',
   headers: {
     'Content-Type': 'application/json'
   }
