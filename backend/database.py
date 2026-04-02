@@ -22,8 +22,11 @@ class Database:
         Args:
             connection_string: PostgreSQL connection string
         """
-        # Default to local PostgreSQL database
-        self.connection_string = connection_string or 'postgresql://localhost:5432/llmtrader'
+        # Use DATABASE_URL env var for Docker, fallback to localhost for local dev
+        self.connection_string = connection_string or os.environ.get(
+            'DATABASE_URL', 
+            'postgresql://localhost:5432/llmtrader'
+        )
         
         # Create connection pool (min 1, max 10 connections)
         self.pool = SimpleConnectionPool(1, 10, self.connection_string)
