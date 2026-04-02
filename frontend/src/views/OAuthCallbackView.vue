@@ -15,8 +15,8 @@
           <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
           <h2 style="font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; color: #10b981;">Connected!</h2>
           <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Your Schwab account has been successfully linked to LLMtrader.</p>
-          <button class="btn btn-primary" @click="$router.push('/terminal')">
-            Go to Terminal
+          <button class="btn btn-primary" @click="$router.push('/dashboard')">
+            Go to Dashboard
           </button>
         </div>
         
@@ -29,7 +29,7 @@
             <button class="btn btn-secondary" @click="$router.push('/onboarding')">
               Try Again
             </button>
-            <button class="btn btn-primary" @click="$router.push('/terminal')">
+            <button class="btn btn-primary" @click="$router.push('/dashboard')">
               Skip for Now
             </button>
           </div>
