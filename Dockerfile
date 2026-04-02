@@ -39,11 +39,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Build and install TA-Lib C library (required for TA-Lib Python package)
+# Use single-threaded make to avoid race condition in gen_code tool
 RUN wget -q https://sourceforge.net/projects/ta-lib/files/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz && \
     tar -xzf ta-lib-0.4.0-src.tar.gz && \
     cd ta-lib && \
     ./configure --prefix=/usr && \
-    make -j$(nproc) && \
+    make && \
     make install && \
     cd .. && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
