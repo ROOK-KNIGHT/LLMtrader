@@ -10,9 +10,9 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional, Dict, Any
 from datetime import datetime
 
-from database import db
-from auth.service import AuthService
-from auth.schwab_oauth import SchwabOAuth
+from backend.database import db
+from backend.auth.service import AuthService
+from backend.auth.schwab_oauth import SchwabOAuth
 
 # Initialize services
 auth_service = AuthService()
