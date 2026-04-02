@@ -16,6 +16,11 @@ requests==2.31.0
 aiohttp==3.9.3
 anthropic==0.25.0
 
+# Scientific / technical analysis
+numpy==1.26.4
+pandas==2.2.1
+TA-Lib==0.4.28
+
 # Email validation
 email-validator==2.1.0
 

@@ -29,13 +29,23 @@ FROM python:3.11-slim AS backend-builder
 
 WORKDIR /app
 
-# Install system dependencies for Python packages
+# Install system dependencies for Python packages (including TA-Lib build deps)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     make \
     libpq-dev \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Build and install TA-Lib C library (required for TA-Lib Python package)
+RUN wget -q https://sourceforge.net/projects/ta-lib/files/ta-lib/0.4.0/ta-lib-0.4.0-src.tar.gz && \
+    tar -xzf ta-lib-0.4.0-src.tar.gz && \
+    cd ta-lib && \
+    ./configure --prefix=/usr && \
+    make -j$(nproc) && \
+    make install && \
+    cd .. && rm -rf ta-lib ta-lib-0.4.0-src.tar.gz
 
 # Copy backend requirements
 COPY backend/requirements.txt ./
@@ -51,13 +61,18 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies including nginx
+# Install runtime dependencies including nginx + TA-Lib shared library
 RUN apt-get update && apt-get install -y \
     libpq5 \
     curl \
     nginx \
     supervisor \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy TA-Lib shared library from builder stage
+COPY --from=backend-builder /usr/lib/libta_lib* /usr/lib/
+COPY --from=backend-builder /usr/include/ta-lib /usr/include/ta-lib
+RUN ldconfig
 
 # Copy Python dependencies from builder
 COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
