@@ -393,7 +393,7 @@ async def exchange_schwab_token(
         raise
     except Exception as e:
         # Redirect to frontend error page
-        return RedirectResponse(url=f"http://localhost:5173/oauth/error?message={str(e)}")
+        raise HTTPException(status_code=500, detail=f"Token exchange failed: {str(e)}")
 
 
 @app.get("/api/schwab/status")

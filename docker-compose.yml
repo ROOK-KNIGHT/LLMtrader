@@ -39,6 +39,9 @@ services:
       APP_ENV: production
       APP_DEBUG: "false"
       
+      # JWT Secret - shared across all workers
+      JWT_SECRET: ${JWT_SECRET:-llmtrader_jwt_secret_change_me_in_production_2026}
+      
       # Domain
       DOMAIN: volflowagent.com
     volumes:

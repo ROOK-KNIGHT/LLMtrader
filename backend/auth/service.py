@@ -22,10 +22,12 @@ class AuthService:
             secret_key: JWT secret key
             algorithm: JWT algorithm (default: HS256)
         """
-        # Generate a secure random key if not provided
+        # Use environment variable for consistent key across workers
         if secret_key is None:
-            import secrets
-            secret_key = secrets.token_urlsafe(32)
+            secret_key = os.environ.get('JWT_SECRET')
+            if not secret_key:
+                import secrets
+                secret_key = secrets.token_urlsafe(32)
         
         self.secret_key = secret_key
         self.algorithm = algorithm
