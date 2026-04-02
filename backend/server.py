@@ -18,6 +18,9 @@ from backend.database import db
 from backend.auth.service import AuthService
 from backend.auth.schwab_oauth import SchwabOAuth
 from backend.schwab import SchwabAPI
+from backend.ai.llm_handler import LLMHandler
+from backend.ai.tools_registry import ToolsRegistry
+from backend.ai.prompts import get_system_prompt
 
 # Initialize services
 auth_service = AuthService()
@@ -779,6 +782,163 @@ async def get_transaction(
     """Get a specific transaction"""
     try:
         return schwab.transactions.get_transaction(account_hash, transaction_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# AI Chat Routes
+# ============================================================================
+
+class AIChatRequest(BaseModel):
+    message: str
+    model: str = "claude"
+    persona: str = "portfolio_manager"
+    conversation_history: Optional[List[Dict[str, Any]]] = None
+
+
+class AIKeyRequest(BaseModel):
+    service_name: str   # 'claude', 'grok', 'gemini'
+    api_key: str
+
+
+@app.post("/api/ai/chat")
+async def ai_chat(
+    request: AIChatRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Send a message to the AI trading assistant.
+    Claude (or Grok/Gemini) will use Schwab tools to answer with real data.
+    """
+    try:
+        user_id = user['user_id']
+
+        # Initialize Schwab API for this user (tools need it)
+        try:
+            schwab_api = SchwabAPI(user_id=user_id)
+        except Exception:
+            schwab_api = None  # Allow chat without Schwab (e.g. general questions)
+
+        # Initialize tools registry (only if Schwab is connected)
+        tools_registry = None
+        if schwab_api:
+            try:
+                tools_registry = ToolsRegistry(schwab_api=schwab_api)
+            except Exception as e:
+                logger.warning(f"Could not initialize tools registry for user {user_id}: {e}")
+
+        # Initialize LLM handler with user's API keys from DB
+        llm = LLMHandler(user_id=user_id)
+
+        # Get system prompt for selected persona
+        system_prompt = get_system_prompt(request.persona)
+
+        # Call the model
+        response_text, status, error = await llm.call_model(
+            model_name=request.model,
+            prompt=request.message,
+            system_prompt=system_prompt,
+            tools_registry=tools_registry,
+            conversation_history=request.conversation_history
+        )
+
+        if status == 'error':
+            raise HTTPException(status_code=500, detail=error or "AI model returned an error")
+
+        return {
+            "response": response_text,
+            "model": request.model,
+            "persona": request.persona,
+            "status": "success"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"AI chat error for user {user.get('user_id')}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/ai/keys")
+async def save_ai_key(
+    request: AIKeyRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Save an AI API key for the current user"""
+    try:
+        valid_services = {'claude', 'grok', 'gemini'}
+        service = request.service_name.lower()
+        if service not in valid_services:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid service. Must be one of: {', '.join(valid_services)}"
+            )
+
+        with db.get_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO ai_api_keys (user_id, service_name, api_key, is_active)
+                VALUES (%s, %s, %s, true)
+                ON CONFLICT (user_id, service_name) DO UPDATE
+                SET api_key = EXCLUDED.api_key,
+                    is_active = true,
+                    updated_at = NOW()
+                """,
+                (user['user_id'], service, request.api_key)
+            )
+
+        return {"success": True, "message": f"{service.capitalize()} API key saved"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/ai/keys")
+async def get_ai_keys(user: Dict[str, Any] = Depends(get_current_user)):
+    """Get which AI services have keys configured (does not return the actual keys)"""
+    try:
+        with db.get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT service_name, is_active, updated_at
+                FROM ai_api_keys
+                WHERE user_id = %s
+                """,
+                (user['user_id'],)
+            )
+            rows = cursor.fetchall()
+
+        return {
+            "keys": [
+                {
+                    "service": row['service_name'],
+                    "is_active": row['is_active'],
+                    "updated_at": row['updated_at'].isoformat() if row['updated_at'] else None
+                }
+                for row in rows
+            ]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/ai/keys/{service_name}")
+async def delete_ai_key(
+    service_name: str,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    """Remove an AI API key"""
+    try:
+        with db.get_cursor() as cursor:
+            cursor.execute(
+                "DELETE FROM ai_api_keys WHERE user_id = %s AND service_name = %s",
+                (user['user_id'], service_name.lower())
+            )
+        return {"success": True, "message": f"{service_name} key removed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
