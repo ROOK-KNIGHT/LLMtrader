@@ -6,7 +6,9 @@ const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: '/dashboard'
+      name: 'Home',
+      component: () => import('@/views/OAuthCallbackView.vue'),
+      meta: { requiresAuth: false }
     },
     {
       path: '/login',
