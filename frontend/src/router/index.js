@@ -30,19 +30,19 @@ const router = createRouter({
       path: '/oauth/schwab/callback',
       name: 'SchwabCallback',
       component: () => import('@/views/OAuthCallbackView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/oauth/success',
       name: 'OAuthSuccess',
       component: () => import('@/views/OAuthCallbackView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     },
     {
       path: '/oauth/error',
       name: 'OAuthError',
       component: () => import('@/views/OAuthCallbackView.vue'),
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: false }
     }
   ]
 })
