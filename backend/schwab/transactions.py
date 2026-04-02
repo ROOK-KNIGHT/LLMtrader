@@ -4,7 +4,38 @@ Wrapper for transaction history endpoints.
 """
 
 from typing import Dict, Any, List, Optional
+from datetime import datetime
 from .client import SchwabAPIClient
+
+
+def _normalize_schwab_date(date_str: Optional[str], end_of_day: bool = False) -> Optional[str]:
+    """
+    Normalize a date string to Schwab's required ISO 8601 format: YYYY-MM-DDTHH:MM:SS.000Z
+
+    Accepts: 'YYYY-MM-DD', 'YYYY-MM-DDTHH:MM:SS', 'YYYY-MM-DDTHH:MM:SS.sssZ'
+    """
+    if not date_str:
+        return None
+
+    date_str = date_str.strip()
+
+    if date_str.endswith('Z') and 'T' in date_str and '.' in date_str:
+        return date_str
+
+    try:
+        if 'T' in date_str:
+            clean = date_str.rstrip('Z').split('+')[0]
+            if '.' in clean:
+                clean = clean.split('.')[0]
+            dt = datetime.strptime(clean, '%Y-%m-%dT%H:%M:%S')
+        else:
+            dt = datetime.strptime(date_str[:10], '%Y-%m-%d')
+            if end_of_day:
+                dt = dt.replace(hour=23, minute=59, second=59)
+
+        return dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+    except ValueError:
+        return date_str
 
 
 class TransactionsEndpoint:
@@ -59,14 +90,14 @@ class TransactionsEndpoint:
         """
         params = {}
         if start_date:
-            params['startDate'] = start_date
+            params['startDate'] = _normalize_schwab_date(start_date)
         if end_date:
-            params['endDate'] = end_date
+            params['endDate'] = _normalize_schwab_date(end_date, end_of_day=True)
         if types:
             params['types'] = types
         if symbol:
             params['symbol'] = symbol
-        
+
         return self.client.get(f'/accounts/{account_hash}/transactions', params=params)
     
     def get_transaction(

@@ -81,6 +81,34 @@ class SchwabAPIClient:
         logger.info(f"Schwab API client initialized for user_id={user_id}")
 
     # -------------------------------------------------------------------------
+    # Account Hash Cache
+    # -------------------------------------------------------------------------
+
+    _account_hash_cache: Dict[int, str] = {}  # class-level cache: user_id -> hash
+
+    def get_default_account_hash(self) -> str:
+        """
+        Get the account hash for this user, using a class-level cache to avoid
+        repeated API calls. Always returns the Schwab hashValue (not accountNumber).
+
+        Returns:
+            Account hash string
+
+        Raises:
+            Exception if no accounts found
+        """
+        if self.user_id in SchwabAPIClient._account_hash_cache:
+            return SchwabAPIClient._account_hash_cache[self.user_id]
+
+        account_numbers = self.get('/accounts/accountNumbers')
+        if not account_numbers:
+            raise Exception("No Schwab accounts found for this user.")
+
+        hash_value = account_numbers[0]['hashValue']
+        SchwabAPIClient._account_hash_cache[self.user_id] = hash_value
+        return hash_value
+
+    # -------------------------------------------------------------------------
     # Credential / Token Management (PostgreSQL)
     # -------------------------------------------------------------------------
 
@@ -298,13 +326,51 @@ class SchwabAPIClient:
                 )
 
             if response.status_code >= 400:
-                logger.error(f"Schwab API Error {response.status_code}: {response.text}")
+                # Build a descriptive error message from the response body
+                error_body = ""
+                try:
+                    error_json = response.json()
+                    error_body = error_json.get('message') or error_json.get('error_description') or str(error_json)
+                except Exception:
+                    error_body = response.text.strip()[:300] if response.text else "(empty body)"
+
+                # Add hints for common Schwab error patterns
+                hint = ""
+                if response.status_code == 400:
+                    if 'date' in url.lower() or params and any('time' in k.lower() for k in params):
+                        hint = " (Hint: Schwab requires dates in ISO 8601 format with .000Z suffix, e.g. 2026-04-02T00:00:00.000Z)"
+                    elif '/quotes' in url:
+                        hint = " (Hint: Use /quotes?symbols=SYMBOL not /quotes/{symbol})"
+                    elif '/accounts' in url and 'orders' in url:
+                        hint = " (Hint: Ensure account_hash is the hashValue, not the account number)"
+                elif response.status_code == 401:
+                    hint = " (Hint: Access token may be expired — re-authenticate via Schwab OAuth)"
+                elif response.status_code == 403:
+                    hint = " (Hint: Insufficient permissions for this endpoint)"
+                elif response.status_code == 404:
+                    hint = " (Hint: Resource not found — check symbol, account hash, or order ID)"
+
+                logger.error(f"Schwab API Error {response.status_code}: {error_body}{hint}")
 
             response.raise_for_status()
 
             if response.content:
                 return response.json()
             return {}
+
+        except requests.exceptions.HTTPError as e:
+            # Re-raise with enriched message
+            response = e.response
+            error_body = ""
+            try:
+                error_json = response.json()
+                error_body = error_json.get('message') or error_json.get('error_description') or str(error_json)
+            except Exception:
+                error_body = response.text.strip()[:300] if response.text else "(empty body)"
+            raise requests.exceptions.HTTPError(
+                f"Schwab API {response.status_code}: {error_body} [URL: {response.url}]",
+                response=response
+            ) from e
 
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {e}")

@@ -4,8 +4,59 @@ Wrapper for order placement, management, and cancellation.
 """
 
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from .client import SchwabAPIClient
+
+
+def _normalize_schwab_datetime(dt_str: Optional[str], end_of_day: bool = False) -> Optional[str]:
+    """
+    Normalize a date/datetime string to Schwab's required ISO 8601 format:
+    YYYY-MM-DDTHH:MM:SS.000Z
+
+    Accepts:
+    - 'YYYY-MM-DD'
+    - 'YYYY-MM-DDTHH:MM:SS'
+    - 'YYYY-MM-DDTHH:MM:SS.sssZ'
+    - Already correct format
+
+    Args:
+        dt_str: Input date string
+        end_of_day: If True and only a date is given, use 23:59:59 instead of 00:00:00
+
+    Returns:
+        Normalized datetime string or None
+    """
+    if not dt_str:
+        return None
+
+    dt_str = dt_str.strip()
+
+    # Already in correct format
+    if dt_str.endswith('Z') and 'T' in dt_str and '.' in dt_str:
+        return dt_str
+
+    try:
+        # Strip trailing Z or timezone offset for parsing
+        clean = dt_str.rstrip('Z').split('+')[0].split('-')[0] if 'T' in dt_str else dt_str
+
+        if 'T' in dt_str:
+            # Has time component
+            clean = dt_str.rstrip('Z').split('+')[0]
+            # Remove fractional seconds if present
+            if '.' in clean:
+                clean = clean.split('.')[0]
+            dt = datetime.strptime(clean, '%Y-%m-%dT%H:%M:%S')
+        else:
+            # Date only
+            dt = datetime.strptime(dt_str[:10], '%Y-%m-%d')
+            if end_of_day:
+                dt = dt.replace(hour=23, minute=59, second=59)
+
+        return dt.strftime('%Y-%m-%dT%H:%M:%S.000Z')
+
+    except ValueError:
+        # Return as-is if we can't parse it
+        return dt_str
 
 
 class OrdersEndpoint:
@@ -91,16 +142,21 @@ class OrdersEndpoint:
         Example:
             orders = endpoint.get_orders('ABC123', status='FILLED')
         """
-        params = {}
-        if from_entered_time:
-            params['fromEnteredTime'] = from_entered_time
-        if to_entered_time:
-            params['toEnteredTime'] = to_entered_time
+        # Default to today if no dates provided (Schwab requires date range)
+        if not from_entered_time:
+            from_entered_time = datetime.utcnow().strftime('%Y-%m-%dT00:00:00.000Z')
+        if not to_entered_time:
+            to_entered_time = datetime.utcnow().strftime('%Y-%m-%dT23:59:59.000Z')
+
+        params = {
+            'fromEnteredTime': _normalize_schwab_datetime(from_entered_time),
+            'toEnteredTime': _normalize_schwab_datetime(to_entered_time, end_of_day=True),
+        }
         if status:
             params['status'] = status
         if max_results:
             params['maxResults'] = max_results
-        
+
         return self.client.get(f'/accounts/{account_hash}/orders', params=params)
     
     def get_order(

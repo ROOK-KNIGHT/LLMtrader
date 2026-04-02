@@ -99,7 +99,16 @@ class AccountTools:
             return self._get_transaction_history(**args)
         else:
             return f"Error: Unknown tool '{tool_name}'"
-    
+
+    def _resolve_account_hash(self, account_hash: str = None) -> str:
+        """
+        Resolve account hash — auto-resolves via cached client method if not provided
+        or if the value looks like an account number (too short to be a hash).
+        """
+        if account_hash and len(account_hash) >= 20:
+            return account_hash
+        return self.api.client.get_default_account_hash()
+
     def _get_account_summary(self, account_hash: str = None) -> str:
         """Get account summary"""
         try:
@@ -190,18 +199,17 @@ MARGIN INFO:
         except Exception as e:
             return f"Error getting positions: {str(e)}"
     
-    def _get_transaction_history(self, start_date: str, end_date: str, 
-                                 account_hash: str = None, symbol: str = None, 
+    def _get_transaction_history(self, start_date: str, end_date: str,
+                                 account_hash: str = None, symbol: str = None,
                                  types: str = None) -> str:
-        """Get transaction history"""
+        """Get transaction history with date validation and auto account hash resolution"""
         try:
-            if not account_hash:
-                # Get first account
-                accounts = self.api.accounts.get_all_accounts()
-                if not accounts:
-                    return "Error: No accounts found"
-                account_hash = accounts[0]['securitiesAccount']['accountNumber']
-            
+            if not start_date or not end_date:
+                return "Error: start_date and end_date are required (e.g. '2026-04-01' or '2026-04-01T00:00:00.000Z')"
+
+            # Auto-resolve account hash (always use hashValue, not account number)
+            account_hash = self._resolve_account_hash(account_hash)
+
             transactions = self.api.transactions.get_transactions(
                 account_hash=account_hash,
                 start_date=start_date,

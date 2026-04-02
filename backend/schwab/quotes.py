@@ -32,23 +32,28 @@ class QuotesEndpoint:
     ) -> Dict[str, Any]:
         """
         Get real-time quote for a single symbol.
-        
+
+        Note: Schwab's GET /quotes/{symbol} endpoint returns 404.
+        We use GET /quotes?symbols={symbol} instead and return the symbol's data directly.
+
         Args:
             symbol: Stock symbol (e.g., 'AAPL', '$SPX', '/ES')
             fields: Optional fields to include (quote, fundamental, extended, reference, regular)
-        
+
         Returns:
             Quote object with price, volume, bid/ask, etc.
-        
+
         Example:
             quote = endpoint.get_quote('AAPL')
-            price = quote['quote']['lastPrice']
+            price = quote['AAPL']['quote']['lastPrice']
         """
-        params = {}
+        params = {'symbols': symbol.upper().strip()}
         if fields:
             params['fields'] = fields
-        
-        return self.client.get(f'/quotes/{symbol}', params=params)
+
+        result = self.client.get('/quotes', params=params)
+        # Return the symbol's data directly (unwrap from batch response)
+        return result.get(symbol.upper().strip(), result)
     
     def get_quotes(
         self,
