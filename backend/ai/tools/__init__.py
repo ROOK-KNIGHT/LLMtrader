@@ -1,5 +1,5 @@
 """
-AI Tools - Individual tool modules for LLM access to Schwab API
+AI Tools - Individual tool modules for LLM access to Schwab API and Alpha Vantage
 """
 
 from .account_tools import AccountTools
@@ -10,6 +10,8 @@ from .order_tools import OrderTools
 from .technical_tools import TechnicalTools
 from .streaming_tools import StreamingTools
 from .position_tools import PositionTools
+from .economic_tools import EconomicTools
+from .fundamental_tools import FundamentalTools
 
 __all__ = [
     'AccountTools',
@@ -19,5 +21,7 @@ __all__ = [
     'OrderTools',
     'TechnicalTools',
     'StreamingTools',
-    'PositionTools'
+    'PositionTools',
+    'EconomicTools',
+    'FundamentalTools',
 ]

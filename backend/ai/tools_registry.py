@@ -10,6 +10,7 @@ from typing import Dict, Any, List
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from schwab import SchwabAPI
+from alphavantage import AlphaVantageClient
 from .tools.account_tools import AccountTools
 from .tools.quote_tools import QuoteTools
 from .tools.history_tools import HistoryTools
@@ -18,6 +19,8 @@ from .tools.order_tools import OrderTools
 from .tools.technical_tools import TechnicalTools
 from .tools.streaming_tools import StreamingTools
 from .tools.position_tools import PositionTools
+from .tools.economic_tools import EconomicTools
+from .tools.fundamental_tools import FundamentalTools
 
 
 class ToolsRegistry:
@@ -34,7 +37,13 @@ class ToolsRegistry:
             schwab_api: SchwabAPI instance (shared across all tools)
         """
         self.api = schwab_api or SchwabAPI()
-        
+
+        # Initialize Alpha Vantage client (graceful if key not set)
+        try:
+            self.av_client = AlphaVantageClient()
+        except ValueError:
+            self.av_client = None
+
         # Initialize all tool modules
         self.account_tools = AccountTools(self.api)
         self.quote_tools = QuoteTools(self.api)
@@ -44,7 +53,9 @@ class ToolsRegistry:
         self.technical_tools = TechnicalTools(self.api)
         self.streaming_tools = StreamingTools(self.api)
         self.position_tools = PositionTools(self.api)
-        
+        self.economic_tools = EconomicTools(self.av_client) if self.av_client else None
+        self.fundamental_tools = FundamentalTools(self.av_client) if self.av_client else None
+
         # Map tool names to modules
         self.tool_modules = {
             # Account tools
@@ -92,6 +103,33 @@ class ToolsRegistry:
             'get_managed_positions': self.position_tools,
             'close_position': self.position_tools,
         }
+
+        # Register Alpha Vantage tools only if client is available
+        if self.economic_tools:
+            self.tool_modules.update({
+                'get_real_gdp': self.economic_tools,
+                'get_real_gdp_per_capita': self.economic_tools,
+                'get_treasury_yield': self.economic_tools,
+                'get_federal_funds_rate': self.economic_tools,
+                'get_cpi': self.economic_tools,
+                'get_inflation': self.economic_tools,
+                'get_retail_sales': self.economic_tools,
+                'get_durable_goods': self.economic_tools,
+                'get_unemployment': self.economic_tools,
+                'get_nonfarm_payroll': self.economic_tools,
+            })
+
+        if self.fundamental_tools:
+            self.tool_modules.update({
+                'get_company_overview': self.fundamental_tools,
+                'get_income_statement': self.fundamental_tools,
+                'get_balance_sheet': self.fundamental_tools,
+                'get_cash_flow': self.fundamental_tools,
+                'get_earnings': self.fundamental_tools,
+                'get_listing_status': self.fundamental_tools,
+                'get_earnings_calendar': self.fundamental_tools,
+                'get_ipo_calendar': self.fundamental_tools,
+            })
     
     def get_all_tools_definitions(self) -> List[Dict[str, Any]]:
         """
@@ -109,6 +147,12 @@ class ToolsRegistry:
         tools.extend(self.technical_tools.get_tool_definitions())
         tools.extend(self.streaming_tools.get_tool_definitions())
         tools.extend(self.position_tools.get_tool_definitions())
+
+        # Include Alpha Vantage tools only if client is available
+        if self.economic_tools:
+            tools.extend(self.economic_tools.get_tool_definitions())
+        if self.fundamental_tools:
+            tools.extend(self.fundamental_tools.get_tool_definitions())
         
         return tools
     
@@ -194,5 +238,27 @@ class ToolsRegistry:
                 'submit_decision',
                 'get_managed_positions',
                 'close_position'
-            ]
+            ],
+            'Economic Indicators': [
+                'get_real_gdp',
+                'get_real_gdp_per_capita',
+                'get_treasury_yield',
+                'get_federal_funds_rate',
+                'get_cpi',
+                'get_inflation',
+                'get_retail_sales',
+                'get_durable_goods',
+                'get_unemployment',
+                'get_nonfarm_payroll',
+            ] if self.economic_tools else [],
+            'Fundamental Data': [
+                'get_company_overview',
+                'get_income_statement',
+                'get_balance_sheet',
+                'get_cash_flow',
+                'get_earnings',
+                'get_listing_status',
+                'get_earnings_calendar',
+                'get_ipo_calendar',
+            ] if self.fundamental_tools else [],
         }

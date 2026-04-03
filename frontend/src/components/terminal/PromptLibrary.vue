@@ -171,6 +171,58 @@ const promptCategories = [
     ]
   },
   {
+    id: 'macro',
+    icon: '',
+    title: 'Macro & Fundamentals',
+    prompts: [
+      {
+        id: 'macro_dashboard',
+        title: 'Macro Dashboard',
+        description: 'GDP, CPI, Fed Funds Rate, and unemployment in one view',
+        timeframe: 'Current',
+        risk: 'info',
+        autoExecute: true,
+        prompt: 'Pull the latest macroeconomic data: real GDP growth, CPI inflation, Fed Funds Rate, and unemployment rate. Summarize the current macro environment and what it means for equities and rates.'
+      },
+      {
+        id: 'yield_curve',
+        title: 'Yield Curve Analysis',
+        description: 'Treasury yields across maturities and inversion signals',
+        timeframe: 'Current',
+        risk: 'info',
+        autoExecute: true,
+        prompt: 'Fetch Treasury yields for 3-month, 2-year, 5-year, and 10-year maturities. Analyze the yield curve shape, any inversion signals, and what this implies for the economy and equity markets.'
+      },
+      {
+        id: 'company_deep_dive',
+        title: 'Company Deep Dive',
+        description: 'Full fundamental analysis: income, balance sheet, cash flow',
+        timeframe: 'Latest Quarter',
+        risk: 'info',
+        autoExecute: false,
+        prompt: 'Do a full fundamental analysis on [SYMBOL]: company overview, revenue/earnings growth, balance sheet health, cash flow quality, and valuation. Is it cheap or expensive relative to growth?'
+      },
+      {
+        id: 'earnings_quality',
+        title: 'Earnings Quality Check',
+        description: 'Verify earnings are backed by real cash flow',
+        timeframe: 'Last 4 Quarters',
+        risk: 'info',
+        autoExecute: false,
+        prompt: 'Analyze earnings quality for [SYMBOL]: compare reported EPS to free cash flow, check for accruals, and assess whether earnings are sustainable. Any red flags?'
+      },
+      {
+        id: 'ipo_calendar',
+        title: 'Upcoming IPOs',
+        description: 'Recent and upcoming IPO listings to watch',
+        timeframe: 'Next 30 Days',
+        risk: 'info',
+        autoExecute: true,
+        prompt: 'Show me the upcoming IPO calendar. Which IPOs are most interesting from a trading perspective? Analyze sector, size, and market conditions for each.'
+      }
+    ]
+  },
+  {
     id: 'portfolio',
     icon: '',
     title: 'Portfolio Management',
