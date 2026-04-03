@@ -493,6 +493,19 @@ async function handleSendMessage() {
 }
 
 // ─── renderMessage: parse <sidepanel> tags + render markdown ───────────────
+// Track which panel IDs have already been opened this session.
+// This prevents re-renders from re-opening panels the user has dismissed.
+const _openedPanelIds = new Set()
+
+function _hashStr(str) {
+  let hash = 0
+  for (let i = 0; i < Math.min(str.length, 200); i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i)
+    hash |= 0
+  }
+  return 'panel_' + Math.abs(hash).toString(36)
+}
+
 function renderMessage(content) {
   if (!content) return ''
 
@@ -501,19 +514,26 @@ function renderMessage(content) {
   let match
   let lastPanelTitle = null
   let lastPanelHtml = null
+  let lastPanelId = null
 
   // Collect all panels (open the last one found)
   while ((match = sidepanelRegex.exec(content)) !== null) {
     lastPanelTitle = match[1]
     lastPanelHtml = match[2].trim()
+    lastPanelId = _hashStr(lastPanelTitle + lastPanelHtml)
   }
 
-  // Open the side panel if we found one
-  if (lastPanelTitle && lastPanelHtml) {
-    // Use nextTick to avoid calling store during render
-    setTimeout(() => {
-      panelStore.open(lastPanelTitle, lastPanelHtml)
-    }, 0)
+  // Only open the panel if:
+  //   1. We found one in this message
+  //   2. It hasn't been opened before (prevents re-render re-open)
+  //   3. It hasn't been dismissed by the user
+  if (lastPanelTitle && lastPanelHtml && lastPanelId) {
+    if (!_openedPanelIds.has(lastPanelId) && !panelStore.isDismissed(lastPanelId)) {
+      _openedPanelIds.add(lastPanelId)
+      setTimeout(() => {
+        panelStore.open(lastPanelTitle, lastPanelHtml, lastPanelId)
+      }, 0)
+    }
   }
 
   // Strip all sidepanel blocks from the chat text

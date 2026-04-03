@@ -1,28 +1,40 @@
 <template>
-  <div v-if="panelStore.isOpen" class="side-panel-overlay">
-    <div class="side-panel">
-      <div class="panel-header">
-        <div class="panel-title">{{ panelStore.title }}</div>
-        <div class="panel-actions">
-          <button 
-            class="panel-btn" 
-            :class="{ active: panelStore.isPinned }"
-            @click="panelStore.togglePin"
+  <div v-if="panelStore.hasAnyPanel" class="side-panel-overlay">
+    <div
+      v-for="panel in panelStore.panels"
+      :key="panel.id"
+      class="side-panel"
+      :class="{ collapsed: !panel.isExpanded }"
+    >
+      <!-- Panel Header (always visible) -->
+      <div class="panel-header" @click="panelStore.toggleExpand(panel.id)">
+        <div class="panel-header-left">
+          <span class="collapse-arrow">{{ panel.isExpanded ? '▼' : '▶' }}</span>
+          <div class="panel-title">{{ panel.title }}</div>
+          <span v-if="panel.isPinned" class="pin-indicator">📌</span>
+        </div>
+        <div class="panel-actions" @click.stop>
+          <button
+            class="panel-btn"
+            :class="{ active: panel.isPinned }"
+            @click="panelStore.togglePin(panel.id)"
             title="Pin panel"
           >
             PIN
           </button>
-          <button 
-            class="panel-btn" 
-            @click="panelStore.close"
+          <button
+            class="panel-btn"
+            @click="panelStore.close(panel.id)"
             title="Close panel"
           >
-            X
+            ✕
           </button>
         </div>
       </div>
-      <div class="panel-body">
-        <div v-html="panelStore.htmlContent" class="panel-content"></div>
+
+      <!-- Panel Body (only when expanded) -->
+      <div v-if="panel.isExpanded" class="panel-body">
+        <div v-html="panel.htmlContent" class="panel-content"></div>
       </div>
     </div>
   </div>
@@ -42,63 +54,100 @@ const panelStore = usePanelStore()
   bottom: 0;
   width: 500px;
   z-index: 100;
-  animation: slideIn 0.3s ease-out;
-}
-
-@keyframes slideIn {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
 }
 
 .side-panel {
   width: 100%;
-  height: 100%;
   background: var(--bg-secondary);
   border-left: 2px solid var(--border-accent);
   box-shadow: -5px 0 20px rgba(255, 149, 0, 0.3);
   display: flex;
   flex-direction: column;
+  pointer-events: all;
+  transition: flex 0.3s ease;
+  animation: slideIn 0.3s ease-out;
+}
+
+/* Expanded panel takes remaining space */
+.side-panel:not(.collapsed) {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Collapsed panel is just the header */
+.side-panel.collapsed {
+  flex: 0 0 auto;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
 }
 
 .panel-header {
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-primary);
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 1rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.panel-header:hover {
+  background: var(--bg-hover);
+}
+
+.panel-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.collapse-arrow {
+  font-size: 0.7rem;
+  color: var(--accent-primary);
+  flex-shrink: 0;
 }
 
 .panel-title {
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.15em;
+  letter-spacing: 0.12em;
   text-shadow: 0 0 8px var(--accent-primary);
   text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pin-indicator {
+  font-size: 0.75rem;
+  flex-shrink: 0;
 }
 
 .panel-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 
 .panel-btn {
-  padding: 0.25rem 0.75rem;
+  padding: 0.2rem 0.6rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-secondary);
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-base);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-family: 'VT323', monospace;
   letter-spacing: 0.1em;
 }
@@ -120,6 +169,7 @@ const panelStore = usePanelStore()
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
+  min-height: 0;
 }
 
 .panel-content {
@@ -127,7 +177,7 @@ const panelStore = usePanelStore()
   color: var(--text-primary);
 }
 
-/* Styling for LLM-generated content */
+/* ── LLM-generated content styles ── */
 .panel-content :deep(table) {
   width: 100%;
   border-collapse: collapse;
@@ -163,17 +213,9 @@ const panelStore = usePanelStore()
   letter-spacing: 0.1em;
 }
 
-.panel-content :deep(.profit) {
-  color: var(--text-profit);
-}
-
-.panel-content :deep(.loss) {
-  color: var(--text-loss);
-}
-
-.panel-content :deep(.warning) {
-  color: #ffff00;
-}
+.panel-content :deep(.profit) { color: var(--text-profit); }
+.panel-content :deep(.loss)   { color: var(--text-loss); }
+.panel-content :deep(.warning){ color: #ffff00; }
 
 .panel-content :deep(.badge) {
   padding: 0.25rem 0.5rem;
