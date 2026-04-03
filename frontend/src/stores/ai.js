@@ -56,7 +56,7 @@ export const useAIStore = defineStore('ai', () => {
 
     try {
       const authStore = useAuthStore()
-      const token = authStore.token
+      const token = authStore.sessionToken
 
       if (!token) {
         throw new Error('Not authenticated. Please log in.')
