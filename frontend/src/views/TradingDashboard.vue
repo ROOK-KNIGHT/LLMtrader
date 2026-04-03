@@ -215,9 +215,11 @@
                         {{ formatTime(message.timestamp) }}
                       </span>
                     </div>
-                    <div style="color: var(--text-secondary); line-height: 1.6; white-space: pre-wrap;">
-                      {{ message.content }}
-                    </div>
+                    <div 
+                      class="chat-message-content"
+                      style="color: var(--text-secondary); line-height: 1.6;"
+                      v-html="renderMessage(message.content)"
+                    ></div>
                   </div>
                 </div>
               </div>
@@ -280,6 +282,8 @@ import ConfigDashboard from '@/components/terminal/ConfigDashboard.vue'
 import SidePanel from '@/components/terminal/SidePanel.vue'
 import { usePanelStore } from '@/stores/panels'
 import dayjs from 'dayjs'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const router = useRouter()
 const aiStore = useAIStore()
@@ -486,6 +490,42 @@ async function handleSendMessage() {
   if (messagesContainer.value) {
     messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
   }
+}
+
+// ─── renderMessage: parse <sidepanel> tags + render markdown ───────────────
+function renderMessage(content) {
+  if (!content) return ''
+
+  // Extract all <sidepanel title="...">...</sidepanel> blocks
+  const sidepanelRegex = /<sidepanel\s+title="([^"]*)">([\s\S]*?)<\/sidepanel>/gi
+  let match
+  let lastPanelTitle = null
+  let lastPanelHtml = null
+
+  // Collect all panels (open the last one found)
+  while ((match = sidepanelRegex.exec(content)) !== null) {
+    lastPanelTitle = match[1]
+    lastPanelHtml = match[2].trim()
+  }
+
+  // Open the side panel if we found one
+  if (lastPanelTitle && lastPanelHtml) {
+    // Use nextTick to avoid calling store during render
+    setTimeout(() => {
+      panelStore.open(lastPanelTitle, lastPanelHtml)
+    }, 0)
+  }
+
+  // Strip all sidepanel blocks from the chat text
+  const cleanText = content.replace(/<sidepanel[\s\S]*?<\/sidepanel>/gi, '').trim()
+
+  // Render remaining text as markdown, sanitize with DOMPurify
+  // Allow SVG tags for inline charts
+  const rawHtml = marked.parse(cleanText || '')
+  return DOMPurify.sanitize(rawHtml, {
+    ADD_TAGS: ['svg', 'path', 'rect', 'circle', 'line', 'polyline', 'polygon', 'text', 'g', 'defs', 'use'],
+    ADD_ATTR: ['viewBox', 'xmlns', 'fill', 'stroke', 'stroke-width', 'd', 'cx', 'cy', 'r', 'x', 'y', 'width', 'height', 'x1', 'y1', 'x2', 'y2', 'points', 'transform', 'opacity', 'font-size', 'text-anchor', 'font-family']
+  })
 }
 
 function handlePromptSelect(prompt) {
@@ -974,5 +1014,96 @@ onMounted(() => {
   color: var(--accent-primary);
   margin-bottom: 1rem;
   text-shadow: 0 0 10px var(--accent-primary);
+}
+
+/* Chat message markdown rendering */
+.chat-message-content :deep(p) {
+  margin: 0.4rem 0;
+}
+.chat-message-content :deep(ul),
+.chat-message-content :deep(ol) {
+  margin: 0.4rem 0 0.4rem 1.2rem;
+  padding: 0;
+}
+.chat-message-content :deep(li) {
+  margin: 0.2rem 0;
+}
+.chat-message-content :deep(strong) {
+  color: var(--accent-primary);
+  font-weight: 700;
+}
+.chat-message-content :deep(em) {
+  color: var(--text-primary);
+  font-style: italic;
+}
+.chat-message-content :deep(h1),
+.chat-message-content :deep(h2),
+.chat-message-content :deep(h3) {
+  color: var(--accent-primary);
+  text-shadow: 0 0 8px var(--accent-primary);
+  margin: 0.75rem 0 0.4rem 0;
+  letter-spacing: 0.1em;
+}
+.chat-message-content :deep(code) {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 3px;
+  padding: 0.1rem 0.4rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9em;
+  color: var(--accent-primary);
+}
+.chat-message-content :deep(pre) {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: var(--radius-sm);
+  padding: 0.75rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.chat-message-content :deep(pre code) {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-primary);
+}
+.chat-message-content :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.95rem;
+}
+.chat-message-content :deep(th) {
+  padding: 0.4rem 0.75rem;
+  text-align: left;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  letter-spacing: 0.08em;
+}
+.chat-message-content :deep(td) {
+  padding: 0.4rem 0.75rem;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-primary);
+}
+.chat-message-content :deep(tr:hover) {
+  background: var(--bg-hover);
+}
+.chat-message-content :deep(blockquote) {
+  border-left: 3px solid var(--accent-primary);
+  margin: 0.5rem 0;
+  padding: 0.25rem 0.75rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.chat-message-content :deep(hr) {
+  border: none;
+  border-top: 1px solid var(--border-primary);
+  margin: 0.75rem 0;
+}
+.chat-message-content :deep(svg) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.5rem 0;
 }
 </style>
