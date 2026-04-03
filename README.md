@@ -2,59 +2,60 @@
 
 **AI-Powered Portfolio Management & Swing Trading Platform**
 
-Domain: `llmvolflowtrader.com`
+- **Live URL:** https://volflowagent.com
+- **GitHub:** https://github.com/ROOK-KNIGHT/LLMtrader
+- **EC2 IP:** 3.238.51.196
 
 ---
 
 ## Overview
 
-LLM VolFlow Trader is a next-generation trading platform that combines institutional-grade market analysis with AI-powered decision making. Unlike traditional algorithmic trading systems, this platform uses Large Language Models (Claude, Grok, Gemini) to analyze market conditions, manage positions, and execute trades through the Schwab API.
+LLM VolFlow Trader is a next-generation trading platform that combines institutional-grade market analysis with AI-powered decision making. Users authenticate, connect their Schwab brokerage account, and interact with an LLM (Claude, Grok, or Gemini) that can analyze markets, pull real-time data, and execute trades — all through a Bloomberg-style terminal UI.
 
 ### Key Features
 
-- **Google SSO Authentication** - Secure sign-in with Google accounts only
-- **SMS 2FA via AWS SNS** - Two-factor authentication on every login
-- **User-Provided Schwab API Keys** - Full encryption at rest with Fernet
-- **LLM-Powered Trading** - AI models analyze markets and execute trades
-- **Pre-Screened Prompt Library** - 20+ institutional-grade trading strategies
-- **Real-Time Position Monitoring** - WebSocket streaming with trigger-based reviews
-- **Bloomberg Terminal UI** - Professional dark-theme interface
-- **TradingView Charts** - Lightweight charts for technical analysis
-- **TA-Lib Integration** - On-demand technical indicators
-- **Multi-Tenant Architecture** - Fully isolated per-user credentials
+- **Email/Password Authentication** — JWT-based auth with bcrypt hashing
+- **Schwab API Integration** — Full OAuth2 flow, token auto-refresh, all REST endpoints
+- **LLM-Powered Trading** — Claude Sonnet / Grok / Gemini with 40+ tool calls
+- **Pre-Screened Prompt Library** — 20+ institutional-grade trading strategies
+- **Real-Time Streaming** — WebSocket streaming for quotes, charts, account activity
+- **Technical Indicators** — TA-Lib: RSI, MACD, Bollinger Bands, ATR, VWAP, etc.
+- **Macroeconomic Data** — Alpha Vantage: GDP, CPI, Fed Funds Rate, Treasury Yields, NFP
+- **Company Fundamentals** — Alpha Vantage: Income Statement, Balance Sheet, Earnings, IPO Calendar
+- **Bloomberg Terminal UI** — Vue 3 SPA with dark theme, TradingView Lightweight Charts
+- **Multi-Tenant** — Per-user Schwab credentials encrypted with Fernet
 
 ---
 
-## Architecture
-
-### Tech Stack
+## Tech Stack
 
 **Backend:**
-- Python 3.11+
-- PostgreSQL (user data, positions, market data)
-- FastAPI (HTTP + WebSocket server)
+- Python 3.11 / FastAPI / Uvicorn (4 workers)
+- PostgreSQL 16 (user data, positions, conversation history)
 - Schwab API (OAuth2, REST, WebSocket streaming)
-- AWS SNS (SMS verification)
-- Fernet encryption (credential storage)
+- Alpha Vantage API (macroeconomic + fundamental data)
+- Fernet encryption (Schwab credential storage)
+- TA-Lib (technical indicators)
 
 **Frontend:**
-- Vanilla JavaScript (ES6+)
+- Vue 3 + Vite (SPA, built to `/app/frontend/dist`)
+- Pinia (state management)
 - TradingView Lightweight Charts
-- WebSocket client (real-time data)
 - Bloomberg-inspired dark theme
 
 **AI/LLM:**
-- Claude Sonnet 4.6 (Anthropic)
-- Grok 4.1 Fast Reasoning (xAI)
-- Gemini 3 Pro Preview (Google)
+- Claude Sonnet (Anthropic)
+- Grok Fast (xAI)
+- Gemini Pro (Google)
 - Single model OR debate mode per request
 
 **Infrastructure:**
-- AWS EC2 (c5.xlarge or similar)
+- AWS EC2 (c5.xlarge, Ubuntu 22.04)
+- Docker + docker-compose (single container: nginx + uvicorn + token-refresher)
+- Supervisor (process manager inside container)
 - NGINX (reverse proxy, SSL termination)
-- systemd (service management)
+- Let's Encrypt (SSL certificates, mounted from host)
 - Route53 (DNS)
-- Let's Encrypt (SSL certificates)
 
 ---
 
@@ -63,288 +64,388 @@ LLM VolFlow Trader is a next-generation trading platform that combines instituti
 ```
 LLM_VolFlow_Trader/
 ├── README.md
-├── requirements.txt
-├── .env.example
-├── server.py                    # Main FastAPI server (HTTP + WebSocket)
-├── config/
-│   └── settings.py              # Environment config, encryption keys
-├── auth/                        # Authentication layer
-│   ├── google_sso.py            # Google OAuth2 flow
-│   ├── sms_verify.py            # AWS SNS SMS verification
-│   ├── credential_manager.py    # Fernet encryption for Schwab keys/tokens
-│   ├── session_manager.py       # JWT creation, validation, refresh
-│   └── middleware.py            # Auth middleware for HTTP + WebSocket
-├── core/                        # Core trading infrastructure
-│   ├── schwab_client.py         # Per-user Schwab API client (full endpoint coverage)
-│   ├── order_handler.py         # Schwab order execution (per-user)
-│   ├── streaming_service.py     # Schwab WebSocket streaming (per-user)
-│   └── database_manager.py      # PostgreSQL connection pooling
-├── llm/                         # LLM orchestration
-│   ├── orchestrator.py          # AI Board (single & debate modes)
-│   ├── handler.py               # LLM API calls (Claude/Grok/Gemini)
-│   ├── prompts.py               # System prompts & prompt library
-│   ├── tools_registry.py        # Expanded tools (per-user context)
-│   └── position_monitor.py      # LLM position monitor (ported from VolFlow)
-├── indicators/
-│   └── talib_engine.py          # TA-Lib wrapper (on-demand indicators)
-├── data/                        # Data services
-│   ├── sentiment.py             # StockTwits sentiment
-│   ├── news.py                  # News headlines
-│   ├── regime.py                # Regime chain
-│   └── tables.py                # DataTables (ported from VolFlow)
-├── websocket/                   # WebSocket server
-│   ├── server.py                # WebSocket server
-│   ├── ai_handler.py            # AI Board WS handler
-│   └── data_stream.py           # Real-time data stream
-├── frontend/                    # Frontend files
-│   ├── index.html               # Login/Signup page
-│   ├── terminal.html            # Main Bloomberg terminal UI
-│   ├── oauth-callback.html      # Schwab OAuth callback page
-│   ├── css/
-│   │   ├── auth.css             # Login/signup styles
-│   │   ├── terminal.css         # Bloomberg dark theme
-│   │   └── components.css       # Panel/widget styles
-│   └── js/
-│       ├── auth.js              # Login/signup/OAuth logic
-│       ├── app.js               # Main app controller
-│       ├── terminal.js          # Chat/command terminal
-│       ├── portfolio.js         # Portfolio dashboard
-│       ├── charts.js            # TradingView Lightweight Charts
-│       ├── options.js           # Options chain viewer
-│       └── ws-client.js         # WebSocket client (auth'd)
-├── deployment/
-│   ├── nginx.conf               # NGINX configuration
-│   ├── llmvolflowtrader.service # systemd service file
-│   └── setup.sh                 # EC2 setup script
-└── tests/
-    └── ...
+├── Dockerfile                        # Multi-stage: builds Vue frontend + installs Python deps
+├── docker-compose.yml                # Two services: postgres + app
+├── nginx.conf                        # NGINX config (SSL, proxy to uvicorn on :8000)
+├── supervisord.conf                  # Manages nginx + uvicorn + token-refresher inside container
+├── .env                              # Environment variables (NOT committed)
+├── backend/
+│   ├── server.py                     # FastAPI app — all HTTP + WebSocket routes
+│   ├── database.py                   # PostgreSQL schema + connection pool
+│   ├── token_refresher.py            # Background process: refreshes Schwab tokens every 25min
+│   ├── requirements.txt              # Python dependencies
+│   ├── ai/
+│   │   ├── llm_handler.py            # LLM API calls (Claude/Grok/Gemini)
+│   │   ├── conversation.py           # Conversation history + tool execution loop
+│   │   ├── prompts.py                # System prompt (describes all 40+ capabilities)
+│   │   ├── tools_registry.py         # Registers all tool schemas for LLM function calling
+│   │   └── tools/
+│   │       ├── account_tools.py      # Account balances, positions, transactions
+│   │       ├── quote_tools.py        # Real-time quotes, option chains
+│   │       ├── history_tools.py      # Price history (OHLCV)
+│   │       ├── options_tools.py      # Options chain analysis
+│   │       ├── order_tools.py        # Place, preview, cancel, replace orders
+│   │       ├── technical_tools.py    # TA-Lib indicators (RSI, MACD, BB, ATR, etc.)
+│   │       ├── streaming_tools.py    # Start/stop WebSocket streaming
+│   │       ├── position_tools.py     # LLM-managed position monitoring
+│   │       ├── economic_tools.py     # Alpha Vantage macro data (GDP, CPI, rates, etc.)
+│   │       └── fundamental_tools.py  # Alpha Vantage fundamentals (financials, earnings, IPO)
+│   ├── alphavantage/
+│   │   └── client.py                 # Alpha Vantage API client
+│   ├── auth/
+│   │   ├── service.py                # JWT creation/validation, bcrypt hashing
+│   │   └── schwab_oauth.py           # Schwab OAuth2 flow + token exchange
+│   └── schwab/
+│       ├── client.py                 # Base Schwab HTTP client (auth headers, retries)
+│       ├── accounts.py               # Account balances, positions
+│       ├── quotes.py                 # Real-time quotes
+│       ├── price_history.py          # OHLCV history
+│       ├── options_chain.py          # Options chain
+│       ├── orders.py                 # Order management
+│       ├── transactions.py           # Transaction history
+│       ├── instruments.py            # Symbol search
+│       ├── market_hours.py           # Market hours
+│       ├── movers.py                 # Market movers
+│       ├── user_preferences.py       # User preferences
+│       └── streaming/
+│           ├── client.py             # WebSocket streaming client
+│           ├── level_one.py          # Level 1 quotes stream
+│           ├── chart.py              # Chart data stream
+│           ├── book.py               # Order book stream
+│           ├── screener.py           # Screener stream
+│           ├── account_activity.py   # Account activity stream
+│           └── fields.py             # Field definitions
+└── frontend/
+    ├── index.html
+    ├── vite.config.js
+    ├── package.json
+    └── src/
+        ├── main.js
+        ├── App.vue
+        ├── router/index.js           # Vue Router (Login, Onboarding, OAuth, Terminal, Dashboard)
+        ├── stores/
+        │   ├── auth.js               # Auth state (login, signup, JWT)
+        │   ├── ai.js                 # AI chat state + WebSocket
+        │   ├── market.js             # Market data state
+        │   ├── portfolio.js          # Portfolio state
+        │   ├── panels.js             # Terminal panel layout
+        │   ├── config.js             # User config
+        │   └── risk.js               # Risk dashboard state
+        ├── views/
+        │   ├── LoginView.vue         # Sign up / sign in
+        │   ├── OnboardingView.vue    # Schwab credentials + OAuth wizard
+        │   ├── OAuthCallbackView.vue # Schwab OAuth success/error
+        │   ├── TradingDashboard.vue  # Main Bloomberg terminal
+        │   └── TerminalView.vue      # Terminal view
+        └── components/
+            └── terminal/
+                ├── SidePanel.vue     # Side panel (portfolio, options, etc.)
+                ├── PromptLibrary.vue # Pre-screened prompt cards
+                ├── ConfigDashboard.vue
+                └── RiskDashboard.vue
 ```
+
+---
+
+## Environment Variables
+
+The app reads from environment variables (set in `.env` on the host, passed via `docker-compose.yml`):
+
+```env
+# Database (auto-set by docker-compose)
+DATABASE_URL=postgresql://llmtrader:<DB_PASSWORD>@postgres:5432/llmtrader
+DB_PASSWORD=your_secure_db_password
+
+# Auth
+JWT_SECRET=your_jwt_secret_min_32_chars
+
+# Schwab credential encryption (Fernet key)
+ENCRYPTION_KEY=your_fernet_key_base64
+
+# Domain
+DOMAIN=volflowagent.com
+
+# Alpha Vantage (macroeconomic + fundamental data)
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+
+# LLM API Keys (stored per-user in DB, but can be set globally)
+ANTHROPIC_API_KEY=your_anthropic_key
+XAI_API_KEY=your_xai_key
+GOOGLE_API_KEY=your_google_key
+```
+
+Generate keys:
+```bash
+# Fernet encryption key
+python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+
+# JWT secret
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+---
+
+## Docker Architecture
+
+The app runs as **two Docker containers** managed by `docker-compose`:
+
+### Container 1: `llmtrader-db` (postgres:16-alpine)
+- PostgreSQL database
+- Data persisted in named volume `postgres_data`
+- Healthcheck: `pg_isready -U llmtrader`
+
+### Container 2: `llmtrader-app` (custom image)
+Built from `Dockerfile` in two stages:
+1. **Stage 1 (node:18):** Builds Vue 3 frontend → `/app/frontend/dist`
+2. **Stage 2 (python:3.11-slim):** Installs Python deps, copies built frontend + backend
+
+Inside the container, **Supervisor** manages 3 processes:
+| Process | Command | Port |
+|---------|---------|------|
+| `nginx` | `/usr/sbin/nginx -g 'daemon off;'` | 80, 443 |
+| `uvicorn` | `uvicorn backend.server:app --host 127.0.0.1 --port 8000 --workers 4` | 8000 (internal) |
+| `token-refresher` | `python3 /app/backend/token_refresher.py` | — |
+
+**Volume mounts:**
+- `/etc/letsencrypt` → `/etc/letsencrypt:ro` (SSL certs from host)
+
+---
+
+## Production Deployment Workflow
+
+### EC2 Instance Details
+```
+IP:           3.238.51.196
+User:         ubuntu
+Key file:     llmtrader-key-new.pem  (in project root, NOT committed)
+Project dir:  /home/ubuntu/llmtrader
+SSH command:  ssh -i llmtrader-key-new.pem ubuntu@3.238.51.196
+```
+
+### Standard Deploy (code changes only)
+
+```bash
+# 1. On local machine — commit and push
+git add -A
+git commit -m "your message"
+git push origin master
+
+# 2. SSH to EC2
+ssh -i llmtrader-key-new.pem ubuntu@3.238.51.196
+
+# 3. Pull latest code
+cd /home/ubuntu/llmtrader
+git pull origin master
+
+# 4. Rebuild Docker image
+docker-compose build
+
+# 5. Remove old app container (required — docker-compose v1.29 bug with ContainerConfig)
+docker rm llmtrader-app
+
+# 6. Start new container
+docker-compose up -d
+
+# 7. Wait for startup (~15s), then verify
+sleep 15 && curl -sk https://volflowagent.com/health
+# Expected: {"status":"healthy","timestamp":"..."}
+```
+
+### First-Time / Fresh EC2 Setup
+
+```bash
+# Install Docker
+sudo apt update && sudo apt install -y docker.io docker-compose
+
+# Clone repo
+cd /home/ubuntu
+git clone https://github.com/ROOK-KNIGHT/LLMtrader.git llmtrader
+cd llmtrader
+
+# Create .env file with all required variables
+nano .env
+
+# Get SSL certificate (port 80 must be free — stop any running containers first)
+sudo certbot certonly --standalone -d volflowagent.com -d www.volflowagent.com \
+  --non-interactive --agree-tos -m imart913@gmail.com
+
+# Fix letsencrypt directory permissions so Docker can read certs
+sudo chmod 755 /etc/letsencrypt/live /etc/letsencrypt/archive
+sudo chmod 644 /etc/letsencrypt/live/volflowagent.com/*.pem
+sudo chmod 644 /etc/letsencrypt/archive/volflowagent.com/*.pem
+
+# Build and start
+docker-compose build
+docker-compose up -d
+```
+
+### Useful EC2 Commands
+
+```bash
+# Check container status
+docker ps --format "table {{.Names}}\t{{.Status}}"
+
+# View live logs
+docker logs llmtrader-app -f
+
+# View last 50 lines of logs
+docker logs llmtrader-app --tail 50
+
+# Restart just the app container
+docker restart llmtrader-app
+
+# Get a shell inside the container
+docker exec -it llmtrader-app bash
+
+# Check nginx config inside container
+docker exec llmtrader-app nginx -t
+
+# Reload nginx inside container (after config change)
+docker exec llmtrader-app nginx -s reload
+
+# Connect to PostgreSQL
+docker exec -it llmtrader-db psql -U llmtrader -d llmtrader
+
+# Check health endpoint
+curl -sk https://volflowagent.com/health
+```
+
+---
+
+## Known Issues & Gotchas
+
+### 1. `docker-compose` vs `docker compose`
+The EC2 has **docker-compose v1.29** (Python-based, installed via apt). Use `docker-compose` (hyphenated), NOT `docker compose` (plugin syntax).
+
+### 2. `ContainerConfig` KeyError on `docker-compose up`
+When rebuilding the image and running `docker-compose up -d`, you may get:
+```
+KeyError: 'ContainerConfig'
+```
+This is a known bug in docker-compose v1.29 with newer Docker Engine. **Fix:** manually remove the old container first:
+```bash
+docker rm llmtrader-app
+docker-compose up -d
+```
+
+### 3. SSL Certificates — Permissions
+Let's Encrypt certs are owned by root with restricted permissions. The Docker container runs as root but the mounted `/etc/letsencrypt` directory may not be readable. Fix:
+```bash
+sudo chmod 755 /etc/letsencrypt/live /etc/letsencrypt/archive
+sudo chmod 644 /etc/letsencrypt/archive/volflowagent.com/*.pem
+```
+
+### 4. nginx SSL Cert Paths
+The `nginx.conf` uses absolute paths:
+```
+ssl_certificate /etc/letsencrypt/live/volflowagent.com/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/volflowagent.com/privkey.pem;
+```
+These paths are correct and match the volume mount. Do NOT change them to relative paths.
+
+### 5. Alpha Vantage Rate Limits
+The free Alpha Vantage tier allows 25 requests/day and 5 requests/minute. The `ALPHA_VANTAGE_API_KEY` env var must be set in `.env` on the EC2 host. If missing, economic/fundamental tools will return errors but the rest of the app works fine.
+
+---
+
+## API Endpoints
+
+All routes are prefixed with `/api/`:
+
+**Auth:**
+- `POST /api/auth/signup` — Create account (email, password, display_name)
+- `POST /api/auth/login` — Sign in → returns JWT
+- `GET /api/auth/me` — Get current user (requires `Authorization: Bearer <token>`)
+
+**Schwab:**
+- `POST /api/schwab/credentials` — Save Schwab app_key + app_secret (encrypted)
+- `GET /api/schwab/auth-url` — Get Schwab OAuth URL
+- `GET /api/schwab/callback` — OAuth callback (Schwab redirects here)
+- `GET /api/schwab/status` — Check if Schwab is connected
+
+**AI:**
+- `POST /api/ai/chat` — Send message to LLM (triggers tool calls)
+- `GET /api/ai/models` — List available LLM models
+- `WebSocket /ws/ai` — Real-time AI streaming
+
+**Health:**
+- `GET /health` — Health check (used by Docker healthcheck + monitoring)
+
+---
+
+## AI Tools Registry
+
+The LLM has access to **40+ tools** across 10 categories. All tools are defined in `backend/ai/tools_registry.py` and implemented in `backend/ai/tools/`:
+
+| Category | Tools |
+|----------|-------|
+| **Account** | get_account_summary, get_positions, get_transactions, get_account_numbers |
+| **Quotes** | get_quote, get_quotes_batch, search_instruments |
+| **Price History** | get_price_history, get_intraday_history |
+| **Options** | get_options_chain, analyze_options_chain |
+| **Orders** | preview_order, place_order, cancel_order, replace_order, get_orders |
+| **Technical** | calculate_rsi, calculate_macd, calculate_bollinger_bands, calculate_atr, calculate_vwap, get_technical_summary |
+| **Streaming** | start_quote_stream, start_chart_stream, stop_stream, get_stream_status |
+| **Positions** | add_managed_position, update_position_triggers, get_managed_positions, close_managed_position |
+| **Economic** | get_real_gdp, get_cpi, get_fed_funds_rate, get_treasury_yield, get_unemployment, get_nonfarm_payroll, get_retail_sales, get_durable_goods |
+| **Fundamental** | get_company_overview, get_income_statement, get_balance_sheet, get_cash_flow, get_earnings, get_ipo_calendar, get_earnings_calendar |
 
 ---
 
 ## Database Schema
 
-### Users Table
+Key tables in PostgreSQL (`llmtrader` database):
+
 ```sql
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    google_id TEXT UNIQUE NOT NULL,           -- Google sub (unique identifier)
-    email TEXT UNIQUE NOT NULL,               -- From Google
-    display_name TEXT,                        -- From Google
-    avatar_url TEXT,                          -- From Google
-    phone_number TEXT,                        -- For SMS verification
-    phone_verified BOOLEAN DEFAULT false,
-    schwab_app_key_encrypted TEXT,            -- Fernet encrypted (user provides)
-    schwab_app_secret_encrypted TEXT,         -- Fernet encrypted (user provides)
-    schwab_access_token_encrypted TEXT,       -- Fernet encrypted (from OAuth)
-    schwab_refresh_token_encrypted TEXT,      -- Fernet encrypted (from OAuth)
-    schwab_token_expires_at TIMESTAMP,
-    schwab_account_hash TEXT,
-    schwab_connected BOOLEAN DEFAULT false,   -- true after successful OAuth
-    onboarding_complete BOOLEAN DEFAULT false,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMP DEFAULT NOW(),
-    last_login TIMESTAMP
-);
+-- Users
+users (id, email, password_hash, display_name, created_at, last_login)
 
-CREATE TABLE sms_verification_codes (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    phone_number TEXT NOT NULL,
-    code TEXT NOT NULL,                       -- 6-digit code (hashed)
-    expires_at TIMESTAMP NOT NULL,           -- 5 min expiry
-    verified BOOLEAN DEFAULT false,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+-- Schwab credentials (per user, encrypted)
+schwab_credentials (id, user_id, app_key, app_secret_encrypted)
 
-CREATE TABLE user_sessions (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    session_token TEXT UNIQUE,
-    expires_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+-- Schwab OAuth tokens (per user, encrypted)
+schwab_tokens (id, user_id, access_token_encrypted, refresh_token_encrypted, expires_at)
 
-CREATE TABLE conversations (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    session_id UUID,
-    model TEXT,
-    prompt TEXT,
-    response TEXT,
-    status TEXT,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+-- AI API keys (per user)
+ai_api_keys (id, user_id, provider, api_key_encrypted)
 
-CREATE TABLE llm_managed_positions (
-    id SERIAL PRIMARY KEY,
-    user_id INTEGER REFERENCES users(id),
-    symbol TEXT NOT NULL,
-    option_symbol TEXT,
-    underlying_symbol TEXT,
-    contracts INTEGER DEFAULT 1,
-    entry_price FLOAT,
-    current_price FLOAT,
-    strategy_name TEXT,
-    trade_thesis TEXT,
-    triggers JSONB DEFAULT '[]',
-    review_log JSONB DEFAULT '[]',
-    review_cooldown_minutes INTEGER DEFAULT 10,
-    last_reviewed_at TIMESTAMP,
-    status TEXT DEFAULT 'ACTIVE',
-    closed_at TIMESTAMP,
-    close_price FLOAT,
-    close_reason TEXT,
-    pnl FLOAT,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
-);
+-- LLM-managed positions
+managed_positions (id, user_id, symbol, strategy, thesis, triggers, status, pnl, ...)
+
+-- Conversation history
+conversation_history (id, user_id, role, content, model, created_at)
 ```
 
 ---
 
-## Authentication Flow
+## Local Development
 
-1. **User visits llmvolflowtrader.com** → "Sign in with Google" button (ONLY option)
-2. **Google SSO (OAuth2):**
-   - Redirect to Google → User signs in with Google account
-   - Google redirects back with auth code → We get their email, name, avatar
-   - User record created/found in our DB
-3. **SMS Verification (EVERY sign-in):**
-   - After Google SSO completes, prompt for phone number (first time) or use stored number
-   - Send 6-digit code via AWS SNS
-   - User enters code → Verified → JWT session issued
-4. **Schwab API Key Setup (first time only, or if not yet configured):**
-   - After verified sign-in, check if user has Schwab keys stored
-   - If NO keys → Show onboarding wizard with step-by-step guide
-   - User provides App Key + Secret → Encrypted with Fernet → Stored in DB
-   - Trigger Schwab OAuth flow → Get access/refresh tokens → Encrypted + stored
-5. **User is now fully authenticated:**
-   - ✅ Google identity verified
-   - ✅ Phone number verified via SMS
-   - ✅ Schwab API keys encrypted in DB
-   - ✅ Schwab OAuth tokens encrypted in DB
-   - → Redirect to Bloomberg terminal dashboard
+```bash
+# Backend
+cd backend
+pip3 install -r requirements.txt
+# Set env vars in .env
+python3 server.py
+# → https://127.0.0.1:8000
 
----
+# Frontend
+cd frontend
+npm install
+npm run dev
+# → http://localhost:5173
 
-## Pre-Screened Prompt Library
-
-Users can select from 20+ institutional-grade prompts that auto-execute trades:
-
-### Categories
-
-1. **🔥 Quick Plays** - Fast-action trade ideas for today
-2. **🔬 Volatility & Options** - Options mispricing and volatility edge
-3. **📊 Swing Trade Setups** - Multi-day technical setups with defined risk
-4. **🌍 Macro & Thematic** - Sector rotation and macro-driven trades
-5. **🛡️ Portfolio Management** - Hedge, rebalance, and manage risk
-
-Each prompt:
-- Has `auto_execute: true/false` flag
-- Includes risk level (limited/moderate)
-- Specifies timeframe (15min-4hrs, 1-3 weeks, etc.)
-- Provides clear description for users
-
----
-
-## Deployment
-
-### EC2 Instance Requirements
-
-- **Instance Type:** c5.xlarge or c6i.xlarge
-- **OS:** Amazon Linux 2 or Ubuntu 22.04
-- **Storage:** 50GB+ SSD
-- **Security Group:** Ports 22 (SSH), 80 (HTTP), 443 (HTTPS), 5432 (PostgreSQL - internal only)
-
-### Setup Steps
-
-1. **Provision EC2 instance**
-2. **Install dependencies:**
-   ```bash
-   sudo yum update -y
-   sudo yum install python3.11 postgresql15 nginx git -y
-   ```
-3. **Clone repository:**
-   ```bash
-   git clone https://github.com/YOUR_ORG/LLM_VolFlow_Trader.git
-   cd LLM_VolFlow_Trader
-   ```
-4. **Install Python dependencies:**
-   ```bash
-   python3.11 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
-5. **Configure environment variables:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your keys
-   ```
-6. **Setup PostgreSQL database**
-7. **Configure NGINX** (see `deployment/nginx.conf`)
-8. **Setup systemd service** (see `deployment/llmvolflowtrader.service`)
-9. **Obtain SSL certificate** (Let's Encrypt)
-10. **Start services:**
-    ```bash
-    sudo systemctl start llmvolflowtrader
-    sudo systemctl enable llmvolflowtrader
-    sudo systemctl restart nginx
-    ```
-
----
-
-## Development Roadmap
-
-### Phase 1: Project Scaffolding + Auth System ✅
-- [x] Project structure
-- [ ] Google SSO integration
-- [ ] AWS SNS SMS verification
-- [ ] JWT session management
-- [ ] Fernet credential encryption
-- [ ] Schwab onboarding wizard
-
-### Phase 2: Per-User Schwab API Client
-- [ ] Full Schwab REST API client (all endpoints)
-- [ ] Schwab OAuth2 flow
-- [ ] Token auto-refresh service
-- [ ] Per-user client isolation
-
-### Phase 3: LLM Orchestrator + Tools Registry
-- [ ] Port LLM handler from VolFlow
-- [ ] Expand tools registry (all Schwab endpoints)
-- [ ] TA-Lib indicator engine
-- [ ] Pre-screened prompt library
-- [ ] Single & debate modes
-
-### Phase 4: Bloomberg Terminal UI
-- [ ] Dark theme CSS
-- [ ] TradingView Lightweight Charts integration
-- [ ] Portfolio dashboard
-- [ ] Options chain viewer
-- [ ] Chat/command terminal
-- [ ] Prompt card selector
-
-### Phase 5: Background Services
-- [ ] LLM position monitor (per-user)
-- [ ] Schwab streaming (per-user)
-- [ ] Sentiment & news daemons
-- [ ] PostgreSQL LISTEN/NOTIFY pipeline
-
-### Phase 6: EC2 Deployment
-- [ ] EC2 instance provisioning
-- [ ] Domain + SSL + NGINX
-- [ ] systemd services
-- [ ] Monitoring & logging
+# API docs (FastAPI auto-generated)
+# → https://127.0.0.1:8000/docs
+```
 
 ---
 
 ## License
 
-Proprietary - All Rights Reserved
+Proprietary — All Rights Reserved
 
 ---
 
 ## Contact
 
-For questions or support, contact: [Your Email]
+Isaac Martinez — imart913@gmail.com
