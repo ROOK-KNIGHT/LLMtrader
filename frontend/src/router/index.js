@@ -11,6 +11,12 @@ const router = createRouter({
       meta: { requiresAuth: false }
     },
     {
+      path: '/landing',
+      name: 'Landing',
+      component: () => import('@/views/LandingView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
       path: '/login',
       name: 'Login',
       component: () => import('@/views/LoginView.vue'),
@@ -59,9 +65,9 @@ router.beforeEach((to, from, next) => {
     return
   }
   
-  // Redirect bare / to login or dashboard
+  // Redirect bare / to landing (unauthenticated) or dashboard (authenticated)
   if (to.path === '/') {
-    next(authStore.isAuthenticated ? '/dashboard' : '/login')
+    next(authStore.isAuthenticated ? '/dashboard' : '/landing')
     return
   }
   

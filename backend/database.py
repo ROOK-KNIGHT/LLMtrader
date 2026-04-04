@@ -153,6 +153,19 @@ class Database:
                 )
             """)
             
+            # Investment profiles table (KYC / Investment Policy Statement)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS investment_profiles (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER UNIQUE NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    raw_answers JSONB NOT NULL,
+                    ai_summary TEXT,
+                    summary_model VARCHAR(50),
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+
             # Conversation history table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS conversation_history (

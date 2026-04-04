@@ -180,13 +180,15 @@ SCALPER_PROMPT = """You are an intraday scalper focused on quick profits.
 Be fast, decisive, and disciplined with your stops.
 """
 
-def get_system_prompt(persona: str = 'portfolio_manager') -> str:
+def get_system_prompt(persona: str = 'portfolio_manager', investment_profile: str = None) -> str:
     """
-    Get system prompt for specified persona.
-    
+    Get system prompt for specified persona, optionally injecting the client's
+    investment profile summary for personalized AI behavior.
+
     Args:
         persona: Persona type ('portfolio_manager', 'swing_trader', 'scalper')
-    
+        investment_profile: LLM-generated investment profile summary string (optional)
+
     Returns:
         System prompt string
     """
@@ -195,5 +197,87 @@ def get_system_prompt(persona: str = 'portfolio_manager') -> str:
         'swing_trader': SWING_TRADER_PROMPT,
         'scalper': SCALPER_PROMPT
     }
-    
-    return prompts.get(persona, PORTFOLIO_MANAGER_PROMPT)
+
+    base_prompt = prompts.get(persona, PORTFOLIO_MANAGER_PROMPT)
+
+    if investment_profile and investment_profile.strip():
+        profile_section = f"""
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CLIENT INVESTMENT PROFILE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+The following is this client's personalized investment policy statement. Always
+align your recommendations, trade ideas, position sizing, and risk management
+to these stated preferences. Reference this profile when making decisions.
+
+{investment_profile.strip()}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"""
+        return base_prompt + profile_section
+
+    return base_prompt
+
+
+PROFILE_SUMMARIZATION_PROMPT = """You are a professional portfolio manager writing a concise Investment Policy Statement (IPS) for a new client.
+
+Based on the client's questionnaire answers below (each includes a qualitative description and a numerical intensity score), write a professional 2-3 paragraph summary that:
+1. Captures their investment goals across all time horizons
+2. Clearly states their risk tolerance and drawdown limits
+3. Describes their preferred trading style and activity level
+4. Notes their options experience and portfolio concentration preference
+5. Highlights any sector preferences or special instructions
+6. Uses the numerical scores to convey nuance and intensity of preferences
+
+Write in third person, professional tone. Be specific and actionable. No emojis. This summary will be injected into an AI trading assistant's system prompt to guide all future interactions with this client.
+
+CLIENT QUESTIONNAIRE ANSWERS:
+{answers_text}
+
+Write the Investment Policy Statement summary now:"""
+
+
+def format_answers_for_summarization(raw_answers: dict) -> str:
+    """
+    Format raw questionnaire answers into a structured text block for LLM summarization.
+
+    Args:
+        raw_answers: Dictionary of question keys to {text, slider} dicts
+
+    Returns:
+        Formatted string for the summarization prompt
+    """
+    question_labels = {
+        'short_term_goals': ('SHORT-TERM GOALS (0-1 Year)', 'Priority', '1=Low Priority', '10=Critical Priority'),
+        'medium_term_goals': ('MEDIUM-TERM GOALS (1-5 Years)', 'Priority', '1=Low Priority', '10=Critical Priority'),
+        'long_term_goals': ('LONG-TERM GOALS (5+ Years)', 'Priority', '1=Low Priority', '10=Critical Priority'),
+        'risk_tolerance': ('RISK TOLERANCE', 'Risk Level', '1=Very Conservative', '10=Very Aggressive'),
+        'portfolio_concentration': ('PORTFOLIO CONCENTRATION', 'Concentration', '1=Very Broad/Diversified', '10=Ultra Concentrated'),
+        'intraday_activity': ('INTRA-DAY TRADING INTEREST', 'Day-Trade Focus', '1=None (Swing/Position Only)', '10=Heavy Intra-Day Focus'),
+        'income_vs_growth': ('INCOME vs GROWTH ORIENTATION', 'Orientation', '1=Pure Capital Growth', '10=Pure Income Generation'),
+        'options_comfort': ('OPTIONS EXPERIENCE & COMFORT', 'Comfort Level', '1=Never Traded Options', '10=Complex Multi-Leg Strategies'),
+        'active_trading_pct': ('ACTIVE TRADING ALLOCATION', 'Active %', '0%=Fully Passive', '100%=Fully Active'),
+        'max_position_drawdown': ('MAX POSITION DRAWDOWN TOLERANCE', 'Max Loss %', '1%=Very Tight Stops', '50%=Wide Tolerance'),
+        'max_portfolio_drawdown': ('MAX PORTFOLIO DRAWDOWN TOLERANCE', 'Max Drawdown %', '1%=Very Conservative', '50%=High Tolerance'),
+        'sectors_themes': ('SECTORS & THEMES OF INTEREST', None, None, None),
+        'special_instructions': ('SPECIAL INSTRUCTIONS', None, None, None),
+    }
+
+    lines = []
+    for key, (label, slider_label, low_label, high_label) in question_labels.items():
+        answer = raw_answers.get(key, {})
+        if not answer:
+            continue
+
+        text = answer.get('text', '').strip()
+        slider = answer.get('slider')
+
+        if not text and slider is None:
+            continue
+
+        lines.append(f"\n{label}:")
+        if text:
+            lines.append(f"  Client stated: \"{text}\"")
+        if slider is not None and slider_label:
+            lines.append(f"  {slider_label}: {slider}/10 ({low_label} → {high_label})")
+
+    return '\n'.join(lines)

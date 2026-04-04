@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, reactive } from 'vue'
+
+const API_BASE = '/api'
+
+function getAuthHeaders() {
+  const token = localStorage.getItem('session_token')
+  return token ? { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
+}
 
 export const useConfigStore = defineStore('config', () => {
   // API Connections
@@ -44,6 +51,90 @@ export const useConfigStore = defineStore('config', () => {
   const autoBackup = ref(true)
   const backupFrequency = ref('daily')
   
+  // ── Investment Profile ──────────────────────────────────────────────────────
+  const investmentProfile = reactive({
+    exists: false,
+    rawAnswers: {
+      short_term_goals:        { text: '', slider: 5 },
+      medium_term_goals:       { text: '', slider: 5 },
+      long_term_goals:         { text: '', slider: 5 },
+      risk_tolerance:          { text: '', slider: 5 },
+      portfolio_concentration: { text: '', slider: 5 },
+      intraday_activity:       { text: '', slider: 3 },
+      income_vs_growth:        { text: '', slider: 4 },
+      options_comfort:         { text: '', slider: 5 },
+      active_trading_pct:      { text: '', slider: 4 },
+      max_position_drawdown:   { text: '', slider: 4 },
+      max_portfolio_drawdown:  { text: '', slider: 3 },
+      sectors_themes:          { text: '' },
+      special_instructions:    { text: '' },
+    },
+    aiSummary: '',
+    summaryModel: 'claude',
+    updatedAt: null,
+    isLoading: false,
+    isSaving: false,
+    error: null,
+    successMessage: null,
+  })
+
+  async function loadInvestmentProfile() {
+    investmentProfile.isLoading = true
+    investmentProfile.error = null
+    try {
+      const res = await fetch(`${API_BASE}/profile`, { headers: getAuthHeaders() })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      investmentProfile.exists = data.exists
+      if (data.exists) {
+        // Merge raw answers back into reactive state
+        if (data.raw_answers) {
+          Object.keys(data.raw_answers).forEach(key => {
+            if (investmentProfile.rawAnswers[key] !== undefined) {
+              Object.assign(investmentProfile.rawAnswers[key], data.raw_answers[key])
+            }
+          })
+        }
+        investmentProfile.aiSummary = data.ai_summary || ''
+        investmentProfile.summaryModel = data.summary_model || 'claude'
+        investmentProfile.updatedAt = data.updated_at
+      }
+    } catch (e) {
+      investmentProfile.error = 'Failed to load investment profile.'
+    } finally {
+      investmentProfile.isLoading = false
+    }
+  }
+
+  async function saveInvestmentProfile() {
+    investmentProfile.isSaving = true
+    investmentProfile.error = null
+    investmentProfile.successMessage = null
+    try {
+      const res = await fetch(`${API_BASE}/profile`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          raw_answers: investmentProfile.rawAnswers,
+          model: investmentProfile.summaryModel
+        })
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || `HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      investmentProfile.aiSummary = data.ai_summary
+      investmentProfile.exists = true
+      investmentProfile.updatedAt = new Date().toISOString()
+      investmentProfile.successMessage = 'Investment profile updated successfully.'
+    } catch (e) {
+      investmentProfile.error = e.message || 'Failed to save investment profile.'
+    } finally {
+      investmentProfile.isSaving = false
+    }
+  }
+
   // Account Settings
   const userName = ref('Demo User')
   const userEmail = ref('demo@volflowagent.com')
@@ -241,6 +332,11 @@ export const useConfigStore = defineStore('config', () => {
     twoFactorEnabled,
     autoLogout,
     
+    // Investment Profile
+    investmentProfile,
+    loadInvestmentProfile,
+    saveInvestmentProfile,
+
     // Actions
     updateSchwabApi,
     testSchwabConnection,

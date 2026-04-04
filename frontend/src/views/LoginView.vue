@@ -3,7 +3,7 @@
     <div class="card" style="max-width: 400px; width: 90%;">
       <div class="card-header" style="text-align: center;">
         <h1 class="retro-title" style="font-size: 2rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.5rem;">
-          LLM TRADER
+          VOLFLOW AGENT
         </h1>
         <p style="color: var(--text-secondary); font-size: 0.875rem;">
           AI-Powered Portfolio Management

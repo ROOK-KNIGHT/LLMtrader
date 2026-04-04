@@ -20,7 +20,7 @@ from backend.auth.schwab_oauth import SchwabOAuth
 from backend.schwab import SchwabAPI
 from backend.ai.llm_handler import LLMHandler
 from backend.ai.tools_registry import ToolsRegistry
-from backend.ai.prompts import get_system_prompt
+from backend.ai.prompts import get_system_prompt, PROFILE_SUMMARIZATION_PROMPT, format_answers_for_summarization
 
 # Initialize services
 auth_service = AuthService()
@@ -831,8 +831,22 @@ async def ai_chat(
         # Initialize LLM handler with user's API keys from DB
         llm = LLMHandler(user_id=user_id)
 
-        # Get system prompt for selected persona
-        system_prompt = get_system_prompt(request.persona)
+        # Fetch user's investment profile summary for system prompt injection
+        investment_profile = None
+        try:
+            with db.get_cursor() as cursor:
+                cursor.execute(
+                    "SELECT ai_summary FROM investment_profiles WHERE user_id = %s",
+                    (user_id,)
+                )
+                profile_row = cursor.fetchone()
+                if profile_row and profile_row['ai_summary']:
+                    investment_profile = profile_row['ai_summary']
+        except Exception as e:
+            logger.warning(f"Could not load investment profile for user {user_id}: {e}")
+
+        # Get system prompt for selected persona, injecting investment profile
+        system_prompt = get_system_prompt(request.persona, investment_profile=investment_profile)
 
         # Call the model
         response_text, status, error = await llm.call_model(
@@ -941,6 +955,130 @@ async def delete_ai_key(
         return {"success": True, "message": f"{service_name} key removed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Investment Profile Routes
+# ============================================================================
+
+class InvestmentProfileRequest(BaseModel):
+    raw_answers: Dict[str, Any]
+    model: str = "claude"  # Which AI model to use for summarization
+
+
+@app.post("/api/profile")
+async def save_investment_profile(
+    request: InvestmentProfileRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Save investment profile questionnaire answers and generate an AI summary.
+    The summary is injected into the system prompt for all future AI chat sessions.
+    """
+    try:
+        user_id = user['user_id']
+
+        # Format answers for LLM summarization
+        answers_text = format_answers_for_summarization(request.raw_answers)
+        if not answers_text.strip():
+            raise HTTPException(status_code=400, detail="No valid answers provided")
+
+        # Build the summarization prompt
+        summarization_prompt = PROFILE_SUMMARIZATION_PROMPT.format(answers_text=answers_text)
+
+        # Call the LLM to generate the summary
+        llm = LLMHandler(user_id=user_id)
+        summary_text, status, error = await llm.call_model(
+            model_name=request.model,
+            prompt=summarization_prompt,
+            system_prompt=None,
+            tools_registry=None,
+            conversation_history=None
+        )
+
+        if status == 'error' or not summary_text:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to generate profile summary: {error or 'No response from AI'}"
+            )
+
+        import json
+        # Save to database
+        with db.get_cursor() as cursor:
+            cursor.execute(
+                """
+                INSERT INTO investment_profiles (user_id, raw_answers, ai_summary, summary_model)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (user_id) DO UPDATE
+                SET raw_answers = EXCLUDED.raw_answers,
+                    ai_summary = EXCLUDED.ai_summary,
+                    summary_model = EXCLUDED.summary_model,
+                    updated_at = NOW()
+                """,
+                (user_id, json.dumps(request.raw_answers), summary_text.strip(), request.model)
+            )
+
+        return {
+            "success": True,
+            "ai_summary": summary_text.strip(),
+            "message": "Investment profile saved and summarized successfully"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Investment profile save error for user {user.get('user_id')}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/profile")
+async def get_investment_profile(user: Dict[str, Any] = Depends(get_current_user)):
+    """Get the current user's investment profile (raw answers + AI summary)"""
+    try:
+        with db.get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT raw_answers, ai_summary, summary_model, created_at, updated_at
+                FROM investment_profiles
+                WHERE user_id = %s
+                """,
+                (user['user_id'],)
+            )
+            profile = cursor.fetchone()
+
+        if not profile:
+            return {
+                "exists": False,
+                "raw_answers": None,
+                "ai_summary": None,
+                "summary_model": None,
+                "created_at": None,
+                "updated_at": None
+            }
+
+        return {
+            "exists": True,
+            "raw_answers": profile['raw_answers'],
+            "ai_summary": profile['ai_summary'],
+            "summary_model": profile['summary_model'],
+            "created_at": profile['created_at'].isoformat() if profile['created_at'] else None,
+            "updated_at": profile['updated_at'].isoformat() if profile['updated_at'] else None
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/profile")
+async def update_investment_profile(
+    request: InvestmentProfileRequest,
+    user: Dict[str, Any] = Depends(get_current_user)
+):
+    """
+    Update investment profile answers and regenerate the AI summary.
+    Same as POST but semantically clearer for updates from the Settings panel.
+    """
+    return await save_investment_profile(request, user)
 
 
 # ============================================================================
