@@ -1,6 +1,14 @@
 /* Retro VolFlow Terminal Theme - 80s Inspired with Orange Accent */
 @import url('https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&display=swap');
 
+@font-face {
+  font-family: 'DaggerSquare';
+  src: url('/DAGGERSQUARE.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* Background Colors - Darker for CRT feel */
   --bg-primary: #000000;

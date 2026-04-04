@@ -2,9 +2,7 @@
   <div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--bg-primary);">
     <div class="card" style="max-width: 400px; width: 90%;">
       <div class="card-header" style="text-align: center;">
-        <h1 class="retro-title" style="font-size: 2rem; font-weight: 700; color: var(--accent-primary); margin-bottom: 0.5rem;">
-          VOLFLOW AGENT
-        </h1>
+        <img src="/logo.svg" alt="VolFlow Agent" style="height: 48px; width: auto; margin-bottom: 0.75rem; filter: drop-shadow(0 0 8px rgba(255, 149, 0, 0.4));" />
         <p style="color: var(--text-secondary); font-size: 0.875rem;">
           AI-Powered Portfolio Management
         </p>

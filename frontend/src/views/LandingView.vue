@@ -4,7 +4,9 @@
     <!-- ── NAV ─────────────────────────────────────────────────────────────── -->
     <nav class="nav">
       <div class="nav-inner">
-        <div class="nav-logo">VOLFLOW<span class="nav-logo-accent">AGENT</span></div>
+        <div class="nav-logo">
+          <img src="/logo.svg" alt="VolFlow Agent" class="nav-logo-img" />
+        </div>
         <div class="nav-links">
           <a href="#features" class="nav-link">Features</a>
           <a href="#how" class="nav-link">How It Works</a>
@@ -271,7 +273,7 @@
 .landing {
   background: #080808;
   color: #e8e8e8;
-  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'DaggerSquare', 'Inter', 'Helvetica Neue', Arial, sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -296,12 +298,14 @@
   align-items: center;
 }
 .nav-logo {
-  font-size: 1.25rem;
-  font-weight: 800;
-  letter-spacing: 0.15em;
-  color: #fff;
+  display: flex;
+  align-items: center;
 }
-.nav-logo-accent { color: #ff9500; }
+.nav-logo-img {
+  height: 36px;
+  width: auto;
+  filter: drop-shadow(0 0 8px rgba(255, 149, 0, 0.4));
+}
 .nav-links {
   display: flex;
   align-items: center;
