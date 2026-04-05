@@ -807,4 +807,31 @@ function skipStep() {
   padding: 0.85rem 2rem;
   font-size: 1.2rem;
 }
+
+/* ── Mobile Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Card fills screen */
+  .card { width: 96% !important; max-width: 100% !important; }
+
+  /* Question cards */
+  .question-card { padding: 1rem; }
+  .question-header { gap: 0.75rem; }
+  .question-number { font-size: 1.5rem; }
+  .question-title { font-size: 0.95rem; }
+
+  /* Slider row: stack labels above/below */
+  .slider-row {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .slider-label-left, .slider-label-right { font-size: 0.7rem; }
+  .slider { width: 100%; order: 3; }
+  .slider-value { order: 4; width: 100%; text-align: center; }
+
+  /* Multi-select options: 2 columns */
+  .options-grid { grid-template-columns: 1fr 1fr !important; }
+
+  /* Buttons full width */
+  .btn { width: 100%; }
+}
 </style>

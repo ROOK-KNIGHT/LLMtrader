@@ -59,6 +59,27 @@ const panelStore = usePanelStore()
   pointer-events: none;
 }
 
+/* Mobile: full-screen overlay */
+@media (max-width: 768px) {
+  .side-panel-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    z-index: 500;
+    background: rgba(0, 0, 0, 0.7);
+  }
+  .side-panel {
+    width: 100% !important;
+    max-height: 80vh;
+    margin-top: auto;
+    border-left: none !important;
+    border-top: 2px solid var(--border-accent);
+  }
+}
+
 .side-panel {
   width: 100%;
   background: var(--bg-secondary);

@@ -13,6 +13,17 @@
           <a href="#edge" class="nav-link">The Edge</a>
           <router-link to="/login" class="nav-cta">Launch Platform</router-link>
         </div>
+        <!-- Hamburger (mobile only) -->
+        <button class="hamburger" @click="mobileMenuOpen = !mobileMenuOpen" :class="{ open: mobileMenuOpen }" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+      <!-- Mobile dropdown menu -->
+      <div class="mobile-menu" :class="{ open: mobileMenuOpen }">
+        <a href="#features" class="mobile-link" @click="mobileMenuOpen = false">Features</a>
+        <a href="#how" class="mobile-link" @click="mobileMenuOpen = false">How It Works</a>
+        <a href="#edge" class="mobile-link" @click="mobileMenuOpen = false">The Edge</a>
+        <router-link to="/login" class="mobile-cta" @click="mobileMenuOpen = false">Launch Platform</router-link>
       </div>
     </nav>
 
@@ -265,7 +276,8 @@
 </template>
 
 <script setup>
-// No logic needed — pure marketing page
+import { ref } from 'vue'
+const mobileMenuOpen = ref(false)
 </script>
 
 <style scoped>
@@ -758,13 +770,112 @@
   margin: 0 auto;
 }
 
+/* ── Hamburger ────────────────────────────────────────────────────────────── */
+.hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 26px;
+  height: 18px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  z-index: 200;
+}
+.hamburger span {
+  display: block;
+  width: 100%;
+  height: 2px;
+  background: #ff9500;
+  border-radius: 2px;
+  transition: all 0.3s ease;
+  transform-origin: center;
+}
+.hamburger.open span:nth-child(1) { transform: translateY(8px) rotate(45deg); }
+.hamburger.open span:nth-child(2) { opacity: 0; }
+.hamburger.open span:nth-child(3) { transform: translateY(-8px) rotate(-45deg); }
+
+/* ── Mobile Menu ──────────────────────────────────────────────────────────── */
+.mobile-menu {
+  display: none;
+  flex-direction: column;
+  background: rgba(8, 8, 8, 0.98);
+  border-top: 1px solid rgba(255, 149, 0, 0.15);
+  padding: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s ease, padding 0.35s ease;
+}
+.mobile-menu.open {
+  max-height: 400px;
+  padding: 1rem 0;
+}
+.mobile-link {
+  display: block;
+  padding: 0.85rem 2rem;
+  color: #ccc;
+  text-decoration: none;
+  font-size: 1rem;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(255, 149, 0, 0.07);
+  transition: color 0.2s, background 0.2s;
+}
+.mobile-link:hover { color: #fff; background: rgba(255, 149, 0, 0.05); }
+.mobile-cta {
+  display: block;
+  margin: 1rem 2rem 0;
+  padding: 0.75rem 1.5rem;
+  background: #ff9500;
+  color: #000;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  border-radius: 4px;
+  text-align: center;
+}
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .nav-links { gap: 1rem; }
-  .nav-link  { display: none; }
+  /* Nav */
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+  .mobile-menu { display: flex; }
+
+  /* Hero */
+  .hero { min-height: auto; padding-top: 70px; }
+  .hero-inner { padding: 3rem 1.25rem 2rem; }
+  .hero-badge { font-size: 0.65rem; letter-spacing: 0.12em; }
+  .hero-actions { flex-direction: column; align-items: center; }
+  .btn-hero-primary, .btn-hero-secondary { width: 100%; max-width: 320px; text-align: center; }
+  .ticker-inner { gap: 1rem; }
+  .ticker-sep { display: none; }
+
+  /* Stats */
+  .stats-bar { padding: 2rem 1.25rem; }
   .stat-divider { display: none; }
+  .stats-inner { gap: 1.5rem; }
+
+  /* Sections */
+  .section { padding: 4rem 1.25rem; }
+  .section-title { margin-bottom: 2rem; }
+  .features-grid { grid-template-columns: 1fr; }
+
+  /* Steps */
   .step { flex-direction: column; gap: 0.5rem; }
   .step-num { width: auto; text-align: left; font-size: 2rem; }
   .step-content { border-left: none; padding-left: 0; }
+
+  /* Edge */
+  .edge-grid { grid-template-columns: 1fr; gap: 2rem; }
+  .tp-body { padding: 1rem; }
+  .tp-line { font-size: 0.75rem; }
+
+  /* CTA */
+  .cta-section { padding: 4rem 1.25rem; }
+
+  /* Footer */
+  .footer { padding: 2rem 1.25rem; }
 }
 </style>

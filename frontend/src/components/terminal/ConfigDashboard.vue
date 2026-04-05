@@ -1109,4 +1109,29 @@ function resetToDefaults() {
   margin-top: 0.75rem;
   line-height: 1.5;
 }
+
+/* ── Mobile Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .config-dashboard { padding: 0.5rem; }
+  .panel { margin-bottom: 0.75rem; }
+  .panel-header { flex-wrap: wrap; gap: 0.5rem; }
+
+  /* Question cards */
+  .ip-question { padding: 0.75rem; }
+  .ip-q-header { gap: 0.5rem; }
+  .ip-q-num { font-size: 1.4rem; }
+  .ip-q-title { font-size: 0.9rem; }
+
+  /* Slider row: stack */
+  .ip-slider-row { flex-wrap: wrap; gap: 0.25rem; }
+  .ip-sl-left, .ip-sl-right { font-size: 0.65rem; }
+  .ip-slider { width: 100%; order: 3; }
+  .ip-sl-val { order: 4; width: 100%; text-align: center; }
+
+  /* Summary box */
+  .ip-summary-box { padding: 0.75rem; }
+
+  /* Footer button full width */
+  .ip-footer .btn { width: 100%; }
+}
 </style>

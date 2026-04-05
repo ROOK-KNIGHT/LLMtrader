@@ -580,12 +580,16 @@ onMounted(() => {
   background: var(--bg-secondary);
   border-bottom: 2px solid var(--border-accent);
   box-shadow: 0 0 10px rgba(255, 149, 0, 0.3);
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .nav-left {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .logo {
@@ -1125,5 +1129,47 @@ onMounted(() => {
   height: auto;
   display: block;
   margin: 0.5rem 0;
+}
+
+/* ── Mobile Responsive ────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  /* Top nav: stack logo+search on one row, buttons on next */
+  .top-nav { padding: 0.5rem 1rem; }
+  .nav-left { gap: 0.5rem; }
+  .search-box { width: 100%; flex: 1; min-width: 0; }
+  .nav-right { gap: 0.5rem; flex-wrap: wrap; }
+  .status-badge { display: none; }
+  .nav-btn { font-size: 0.8rem; padding: 0.2rem 0.5rem; }
+
+  /* Tab nav: scrollable */
+  .tab-nav { padding: 0.5rem 0.75rem; overflow-x: auto; }
+  .tab-btn { padding: 0.4rem 0.9rem; font-size: 0.95rem; white-space: nowrap; }
+
+  /* Account banner: wrap into 2-col grid */
+  .account-banner {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+  .banner-stat { flex: 1 1 45%; min-width: 0; }
+  .progress-section { flex: 1 1 100%; margin-left: 0; }
+
+  /* Charts: single column */
+  .charts-row { grid-template-columns: 1fr; }
+
+  /* Dashboard padding */
+  .dashboard-content { padding: 0.75rem; gap: 0.75rem; }
+
+  /* AI grid: single column, prompt panel hidden by default */
+  .ai-content { padding: 0.75rem; overflow: auto; }
+  .ai-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    height: auto;
+    min-height: calc(100vh - 120px);
+  }
+  .ai-prompts-panel { height: auto; max-height: 200px; overflow-y: auto; }
+  .ai-chat-panel { height: auto; min-height: 400px; }
+  .ai-chat-panel.with-side-panel { margin-right: 0; }
 }
 </style>
